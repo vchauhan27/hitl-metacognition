@@ -1,52 +1,58 @@
-# Personal Assistant Agent
+# Personal Assistant Agent (Metacognition Framework)
 
-This repository contains a **Personal Scheduling and Messaging Assistant** powered by a LangGraph AI agent. It is designed to manage calendars, send messages, look up contacts, search personal notes via RAG, and remember user preferences using multiple forms of memory.
+This repository contains a **Personal Scheduling and Messaging Assistant** powered by a LangGraph AI agent. It is designed to manage calendars, send messages, look up contacts, search personal notes via RAG, and remember user preferences.
 
-## What the Agent Does
-The agent acts as a personal assistant that handles daily scheduling and communication tasks. It is equipped with tools to interact with a mock calendar, contact book, vector database of notes, and a long-term memory store. A key aspect of the agent is its interactive capability—it requires explicit user approval before performing sensitive actions (like creating events or sending messages) and can ask clarifying questions if details are ambiguous.
+This project is a testbed for a **Metacognitive Harness**: a framework that makes the agent ask clarifying questions, disclose assumptions, or admit ignorance at the right moments, rather than guessing or making silent assumptions.
 
-## The Agent Prompt
-The agent is guided by the following strict system prompt:
+## The Three Arms
+The framework runs in three isolated test modes (Arms) to evaluate the effectiveness of the harness vs. prompt engineering:
+- **Arm A (Bare)**: Stripped-down prompt with no metacognition instructions. Harness runs in shadow mode (logging only).
+- **Arm B (Prompt-only)**: Comprehensive prompt explicitly instructing the model not to guess. Harness runs in shadow mode.
+- **Arm C (Harness)**: Stripped-down prompt. Harness runs in enforce mode (actively blocking and intervening).
 
-```text
-You are a personal scheduling and messaging assistant. Today is {today}.
+## Metacognitive Harness
+To ensure safety and prevent silent assumptions, the agent incorporates a robust metacognitive layer instead of traditional input/output guardrails:
 
-CRITICAL RULES:
-1. ISOLATE TASKS: Treat each new user request as a completely separate task. DO NOT carry over subjects, meetings, or context from previous requests unless the user explicitly refers to them.
-2. CHAIN TOOLS: If you are asked to schedule something for a role (e.g. 'the person who owns the technical sections'), ALWAYS use `search_notes` first to find their name, then use `lookup_contact` to get their email.
-3. RESOLVE AMBIGUITY: If the user provides a partial name (like 'Sam'), you MUST use `lookup_contact`. If multiple people match, you MUST use `ask_user` to clarify which person they mean before doing anything else.
-4. NO GUESSING: If a required detail (time, duration, exact person) is missing or ambiguous after using your tools, call `ask_user`. Do not guess.
-5. Keep replies short and direct.
-```
+### 1. Monitor (Deterministic & Jev)
+Runs before any side-effect tool and emits signals if it detects:
+- **Missing Slots**: Required fields like time or duration are missing.
+- **Ambiguous Referents**: Lookups (e.g., "Sam") return multiple matches.
+- **Stale Memory**: Relies on a durable fact that is too old.
+- **Permission Needed**: Attempts to send messages or move events without standing permission.
+- **Knowledge Gaps (RAG)**: Retrieval scores are below the confidence threshold, or the drafted response makes unsupported claims (via Jev `Noul` classifier).
+- **Vague Wording**: Requests like "sometime next week" (via Jev `Noul` classifier).
+
+### 2. Controller
+Decides how to handle the monitor's signals:
+- `PROCEED`: Low risk, high confidence.
+- `PROCEED_AND_DISCLOSE`: Small gap, cheap to undo (e.g., assumed a time for a meeting). Agent tells the user what it assumed.
+- `ASK`: Gap is costly or requires permission.
+- `IDK`: No support in notes.
+
+### 3. Pre-Tool-Call Hook
+Intercepts side-effect tool executions. In Arm C (`enforce` mode), it uses the controller's decision to either run the tool, run it and append a disclosure, block it and force the agent to call `ask_user` (fail safe on retry), or force an "I don't know" reply.
+
+### 4. Structured Ask Tool
+The `ask_user` tool is rigorously structured to prevent "executive asks" (e.g. "what should I do?"). It requires the agent to name the specific gap, what it tried, options, and a default action. A linter rejects lazy requests.
 
 ## Tools
-The agent uses the following tools to accomplish its tasks:
+The agent uses the following mocked tools to accomplish its tasks:
 - **`search_notes(query)`**: Searches the user's personal notes using vector embeddings.
 - **`get_calendar(day)`**: Lists calendar events for a specific date.
-- **`create_event(day, start, title)`**: Creates a new calendar event. (Requires user approval via CLI).
+- **`create_event(day, start, duration, title)`**: Creates a new calendar event.
+- **`move_event(day, start, new_day, new_start)`**: Moves an existing event.
 - **`lookup_contact(name)`**: Finds contact details by name from the contact book.
-- **`send_message(to, body)`**: Sends a message to a specific contact. (Requires user approval via CLI).
+- **`draft_message(to, body)`**: Drafts a message without sending.
+- **`send_message(to, body)`**: Sends a message to a specific contact.
 - **`remember(key, value)`**: Saves a durable fact or preference about the user to long-term memory.
 - **`recall()`**: Lists everything currently remembered about the user.
-- **`ask_user(question, options)`**: Asks the user a clarifying question and blocks until an answer is received via CLI input.
+- **`ask_user(gap, tried, options, use, default)`**: Asks the user a clarifying question (linted).
+
+*(Note: Approvals and side-effects for these tools are currently mocked and logged to a trace).*
 
 ## Memory Architecture
-The agent leverages three distinct types of memory to provide a seamless and context-aware experience:
-
-### 1. Short-Term Memory (Context Summarization)
-The agent maintains ongoing conversation history using state tracking. To prevent the context window from overflowing, it employs a **Context Summarization** strategy. Once the conversation exceeds a threshold (10 messages), the agent summarizes the older messages (while keeping the 4 most recent messages intact). The summarized version replaces the old messages, freeing up context space while retaining the gist of the conversation history.
-
-### 2. Persistent Memory (Session Checkpointing)
-The agent uses `langgraph.checkpoint.sqlite.SqliteSaver` backed by a SQLite database (`session_memory.sqlite`) as a persistent checkpointer. This allows the session memory (the current conversation thread) to persist across different script executions, enabling the user to exit and return without losing their place in the ongoing conversation thread.
-
-### 3. Long-Term Memory (Durable Facts)
-The agent uses a `langgraph.store.memory.InMemoryStore` to manage durable facts and preferences about the user. The agent explicitly uses the `remember` and `recall` tools to write to and read from this store, enabling it to remember user facts (like "favorite fruit is pineapple") across extended interactions.
+- **Persistent Memory (Session Checkpointing)**: Uses `SqliteSaver` backed by a SQLite database (`session_memory_{arm}.sqlite`) for persistent conversation threads.
+- **Long-Term Memory (Durable Facts)**: Uses `InMemoryStore` for the `remember`/`recall` tools.
 
 ## RAG (Retrieval-Augmented Generation)
-The agent features a RAG system to access the user's personal notes. It uses a **ChromaDB** vector store (`./chroma_db`) populated with embeddings generated via `OpenRouterEmbeddings` (`baai/bge-m3` model). When the agent needs to find information in notes, it uses the `search_notes` tool, which performs a similarity search with relevance scoring against the Chroma vector database and returns the most relevant note passages.
-
-## Guardrail System
-To ensure safety and relevance, the agent incorporates a robust **Guardrail Pipeline** powered by `TypeSafe (Jev)`. Every request and response is screened through this system before being processed or shown to the user:
-- **Input Screening**: User messages are checked for prompt injections (jailbreaks), off-topic requests (only scheduling, contacts, messaging, notes, and general conversation are allowed), and overall severity/harm.
-- **Output Screening**: The agent's replies are checked to ensure they do not violate policy (e.g., complying with something it should have refused) and do not contain severe/harmful content.
-- **Fail Closed**: If the Guardrail API fails, the system defaults to blocking the request and returns a safe "service error" message.
+The agent features a RAG system to access personal notes via **ChromaDB** (`./chroma_db`), populated with `OpenRouterEmbeddings` (`baai/bge-m3`). `search_notes` returns relevance scores, enabling the monitor to detect knowledge gaps when scores fall below the threshold.

@@ -56,3 +56,26 @@ The agent uses the following mocked tools to accomplish its tasks:
 
 ## RAG (Retrieval-Augmented Generation)
 The agent features a RAG system to access personal notes via **ChromaDB** (`./chroma_db`), populated with `OpenRouterEmbeddings` (`baai/bge-m3`). `search_notes` returns relevance scores, enabling the monitor to detect knowledge gaps when scores fall below the threshold.
+
+## How to Run
+
+1. **Install dependencies:**
+   Ensure you have the required packages installed.
+   ```bash
+   pip install -r requirements.txt
+   ```
+   *(If using `uv`, you can run `uv pip install -r requirements.txt`)*
+
+2. **Configure Environment Variables:**
+   Create a `.env` file in the root directory and add your OpenRouter API key (used for the LLM and Jev):
+   ```ini
+   OPENROUTER_API_KEY=your_api_key_here
+   ```
+
+3. **Start the Assistant:**
+   Run the main script. The script will prompt you to select an arm (A, B, or C). 
+   ```bash
+   python assistant.py
+   ```
+   - Select **C** to test the full Metacognitive Harness.
+   - Select **A** or **B** to run in shadow mode (logging only, without active intervention).

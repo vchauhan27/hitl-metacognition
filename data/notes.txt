@@ -1,0 +1,63 @@
+# Personal notes for the assistant (all fake data).
+#
+# FORMAT: one note per paragraph. Separate notes with a blank line.
+# Lines starting with '#' are comments and are ignored.
+# Keep each note self-contained: one fact, names spelled out, dates written in full.
+# Edit this file and restart the assistant: new and changed notes are embedded,
+# deleted notes are removed from Chroma.
+#
+# Deliberately NOT in this file (so the agent should say "I don't know"):
+#   - Acme's pricing or discount terms
+#   - Priya's phone number
+#   - Sam Carter's or Sam Patel's birthday
+#   - Anything about the user's flights or travel
+
+# ---------- Work: vendors and deadlines ----------
+
+Vendor Acme Corp said the contract signing deadline is 15 November 2026. The signed copy goes to legal@example.com, not to the account manager.
+
+The Acme renewal meeting is with their account manager, Dana Whitfield. She prefers video calls and does not take meetings on Fridays.
+
+The quarterly budget review is on 20 October 2026. The slides are due the Friday before, which is 16 October 2026.
+
+The security audit report is due to the compliance team by 30 October 2026. Sam Carter owns the technical sections.
+
+The project kickoff for the Orion migration is on 5 November 2026 at 14:00 in the main conference room.
+
+# ---------- Work: recurring meetings and preferences ----------
+
+Team standup is every weekday at 10:00 in the blue room. It moved from 09:30 to 10:00 starting 1 September 2026.
+
+The user does not take meetings before 10:00 on weekdays, and keeps Friday afternoons free for focused work.
+
+One-on-one with the manager is every Tuesday at 15:00. It should not be moved without checking with the user first.
+
+The user prefers meetings of 30 minutes by default. Anything longer than an hour needs an agenda.
+
+# ---------- People ----------
+
+Priya Nair works in design and lives in the London timezone. She prefers afternoon calls, which is morning for the user.
+
+Sam Carter is an engineer and owns the security audit technical sections. Sam Patel is in sales and handles the Acme relationship on the commercial side. The two are often confused.
+
+Dana Whitfield is Acme's account manager. The user has met her twice and likes to keep messages to her formal.
+
+The user prefers short, direct messages to colleagues, with no greeting beyond the person's first name.
+
+# ---------- Personal ----------
+
+The dentist appointment needs to be rescheduled. Call the clinic on Monday; they are closed on weekends. Mornings are best.
+
+The user's partner is called Alex. Alex's birthday is on 12 December 2026, and the user wants a reminder one week before.
+
+The user's gym sessions are Monday, Wednesday and Thursday at 18:30. Avoid booking anything that evening.
+
+The user is vegetarian. For team lunches, restaurants need at least two vegetarian mains.
+
+# ---------- Logistics ----------
+
+The blue room seats 6 people and has a video screen. The main conference room seats 20.
+
+Expense reports are due by the 5th of each month, submitted through the finance portal.
+
+The office is closed on 26 November 2026 (public holiday) and from 24 December 2026 to 1 January 2027.

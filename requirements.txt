@@ -1,0 +1,11 @@
+langchain>=1.0
+langgraph>=1.0
+langchain-openai        
+langchain-chroma
+chromadb
+httpx
+python-dotenv
+deepeval
+deepteam
+langgraph-checkpoint-sqlite
+typesafe-sdk

@@ -1,0 +1,19 @@
+[project]
+name = "hitl-metacognition"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "chromadb>=1.5.9",
+    "deepeval>=4.2.7",
+    "deepteam>=1.0.9",
+    "httpx>=0.28.1",
+    "langchain>=1.0",
+    "langchain-chroma>=1.1.0",
+    "langchain-openai>=1.6.7",
+    "langgraph>=1.0",
+    "langgraph-checkpoint-sqlite>=3.1.1",
+    "python-dotenv>=1.2.3",
+    "typesafe-sdk>=0.7.2",
+]

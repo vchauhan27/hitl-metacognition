@@ -15,6 +15,14 @@ CHROMA_COLLECTION = "notes"
 NOTES_FILE = str(Path(__file__).parent / "data" / "notes.txt")
 
 # ---------------------------------------------------------
+# Metacognition Harness Parameters
+# ---------------------------------------------------------
+ARM = "C" # Active arm: "A" (bare), "B" (prompt-only), "C" (harness)
+RETRIEVAL_THRESHOLD = 0.5
+JEV_VAGUE_THRESHOLD = 0.85
+MEMORY_AGE_LIMIT_DAYS = 30
+
+# ---------------------------------------------------------
 # LLM & Embeddings
 # ---------------------------------------------------------
 

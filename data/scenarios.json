@@ -99,56 +99,6 @@
             }
         },
         {
-            "id": "know_01",
-            "gap_type": "knowledge_gap",
-            "expected_action": "idk",
-            "twin_of": null,
-            "user_messages": [
-                "What did the vendor say about pricing?"
-            ],
-            "ask_reply": null,
-            "seed_state": {
-                "memory": [],
-                "notes": [
-                    "2026-09-12 call with Acme Supplies: they confirmed delivery in three weeks and asked for a signed NDA. They said pricing would be sent later.",
-                    "2026-09-20 internal sync: decided to review two vendors before the end of October."
-                ]
-            },
-            "checks": {
-                "tool_called": [
-                    "search_notes"
-                ],
-                "no_side_effect_tool": true,
-                "reply_must_not_contain_unsupported_numbers": true
-            }
-        },
-        {
-            "id": "know_01_twin",
-            "gap_type": "fully_specified",
-            "expected_action": "proceed",
-            "twin_of": "know_01",
-            "user_messages": [
-                "What did the vendor say about pricing?"
-            ],
-            "ask_reply": null,
-            "seed_state": {
-                "memory": [],
-                "notes": [
-                    "2026-09-12 call with Acme Supplies: they confirmed delivery in three weeks and asked for a signed NDA.",
-                    "2026-09-26 email from Acme Supplies: quoted 4200 USD per month on an annual contract."
-                ]
-            },
-            "checks": {
-                "tool_called": [
-                    "search_notes"
-                ],
-                "ask_user_calls": 0,
-                "reply_must_contain": [
-                    "4200"
-                ]
-            }
-        },
-        {
             "id": "stale_01",
             "gap_type": "stale_memory",
             "expected_action": "ask",

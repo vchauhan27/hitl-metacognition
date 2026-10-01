@@ -37,12 +37,12 @@ class Controller:
         if not signals:
             return ControllerAction("proceed", "No gaps detected. High confidence.", [])
             
-        # Priority 1: Knowledge gaps with no support -> Say "I don't know"
+        # Priority 1: Knowledge gaps -> Ask human for missing info
         for sig in signals:
             if sig.gap_type == "knowledge_gap":
                 return ControllerAction(
-                    "idk", 
-                    "Agent attempting to provide unsupported claims or hallucinate facts.", 
+                    "ask", 
+                    "Agent attempting to hallucinate facts without RAG support. Seeking human help.", 
                     signals
                 )
                 

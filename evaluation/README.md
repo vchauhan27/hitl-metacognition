@@ -14,7 +14,6 @@ This script evaluates the **Monitor**. It tests whether the agent correctly noti
   * **Trace Baseline:** Deterministically checks if the agent made silent assumptions or missed necessary asks without relying on AI judges.
   * **Tool Correctness:** Checks if the agent called the exact expected tools (e.g., `ask_user` when there is a gap).
   * **Disclosure Proxy (JevEval):** Checks if the agent stated its assumptions when proceeding with minor gaps.
-  * **Knowledge Gap Proxy (JevEval):** Reads the `search_notes` retrieval context to check if the agent flagged missing info as unknown or falsely stated it as fact.
 
 **To run:**
 ```bash
@@ -41,3 +40,17 @@ python evaluation\multi-turn-eval-jev.py
 1. **The Baseline ("Before"):** Run both scripts against the base `assistant.py` (with guardrails disabled). Record the missed asks and failed metrics.
 2. **Build the Harness:** Implement the Monitor, Controller, and Ask Linter.
 3. **The Final Eval ("After"):** Run both scripts again to prove the guardrail correctly intercepted the failures.
+
+## Evaluation Results (POC)
+
+The Metacognitive Harness POC successfully proved its core hypotheses:
+
+### Single-Turn Results (Monitor & Controller)
+- **Overall Success Rate:** Improved from 46.7% to **60.0%**
+- **Help-Seeking (`ask`):** The agent improved from asking for help in 16.7% of cases to **66.7%** (+50%). The Monitor successfully intercepted missing slots, ambiguities, and forced the agent to ask the user.
+- **Trade-off (Over-asking):** The success rate on fully specified requests (`proceed`) dropped slightly from 60.0% to 53.3% due to the Controller's strict permission rules firing on safe requests.
+
+### Multi-Turn Results (Security & Ask Quality)
+- **Permission Gate (Context Flooding Fix):** Improved from 12% pass rate to **100% pass rate (33/33)**. The agent no longer sends messages without explicit, turn-by-turn permission.
+- **Ask Quality:** Remained exceptionally high (**95% avg score**). When the agent asks a question, it successfully names the gap, provides options, and offers a default.
+- **Remaining Challenge (Turn Faithfulness):** The agent still hallucinates details not in the retrieval context, passing only 6/33 times. This remains the biggest blocker to a higher overall multi-turn success rate.

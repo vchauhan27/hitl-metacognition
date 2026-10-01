@@ -19,7 +19,6 @@ Runs before any side-effect tool and emits signals if it detects:
 - **Ambiguous Referents**: Lookups (e.g., "Sam") return multiple matches.
 - **Stale Memory**: Relies on a durable fact that is too old.
 - **Permission Needed**: Attempts to send messages or move events without standing permission.
-- **Knowledge Gaps (RAG)**: Retrieval scores are below the confidence threshold, or the drafted response makes unsupported claims (via Jev `Noul` classifier).
 - **Vague Wording**: Requests like "sometime next week" (via Jev `Noul` classifier).
 
 ### 2. Controller
@@ -55,7 +54,7 @@ The agent uses the following mocked tools to accomplish its tasks:
 - **Long-Term Memory (Durable Facts)**: Uses `InMemoryStore` for the `remember`/`recall` tools.
 
 ## RAG (Retrieval-Augmented Generation)
-The agent features a RAG system to access personal notes via **ChromaDB** (`./chroma_db`), populated with `OpenRouterEmbeddings` (`baai/bge-m3`). `search_notes` returns relevance scores, enabling the monitor to detect knowledge gaps when scores fall below the threshold.
+The agent features a RAG system to access personal notes via **ChromaDB** (`./chroma_db`), populated with `OpenRouterEmbeddings` (`baai/bge-m3`).
 
 ## How to Run
 
@@ -79,3 +78,14 @@ The agent features a RAG system to access personal notes via **ChromaDB** (`./ch
    ```
    - Select **C** to test the full Metacognitive Harness.
    - Select **A** or **B** to run in shadow mode (logging only, without active intervention).
+
+## Evaluation Results
+
+The Metacognitive Harness POC successfully proved its core hypotheses in both single-turn and multi-turn evaluations:
+
+- **Help-Seeking Improved:** The agent improved from asking for help in 16.7% of cases to **66.7%** (+50%) for missing slots and ambiguities.
+- **Context Flooding Fixed:** The Turn-By-Turn verification successfully patched the permission bypass vulnerability, improving the Permission Gate pass rate from 12% to **100%**.
+- **High Quality Asks:** When forced to ask the user, the agent consistently formats the question well (Ask Quality avg score: **95%**), providing options and a default.
+- **Next Steps:** The remaining challenge is Turn Faithfulness; the agent still struggles to restrict answers purely to the retrieval context (passing only 6/33 times).
+
+For full details, see the `evaluation/` directory.

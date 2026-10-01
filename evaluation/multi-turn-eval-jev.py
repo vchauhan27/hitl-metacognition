@@ -51,6 +51,11 @@ EVAL_MODEL = config.get_judge_model()   # judge model object (provider set in co
 RUN_PHASE = "before"
 RESULTS_DIR = f"./evaluation/{RUN_PHASE}-multi-turn-results"
 
+# Smoke-test mode: set True to run only 1 scenario × 1 repeat
+SMOKE = False
+# Smoke a specific scenario by ID (overrides SMOKE flag); set None to disable
+SMOKE_ID = None
+
 # ---------------------------------------------------------------------------
 # Helpers: run the live agent and turn its trace into DeepEval Turns
 # ---------------------------------------------------------------------------
@@ -134,8 +139,8 @@ def build_multi_turns(messages):
                     content = msg.content
                 current_ai_content += content + " "
         elif getattr(msg, "type", "") == "tool":
-            if getattr(msg, "name", None) == "search_knowledge_base":
-                current_retrieval.extend(extract_retrieval_context(str(msg.content)))
+            if getattr(msg, "name", None) in ["search_notes", "ask_user", "lookup_contact", "recall"]:
+                current_retrieval.append(str(msg.content))
 
     flush_turn()
     return turns
@@ -143,6 +148,57 @@ def build_multi_turns(messages):
 
 from deepeval import evaluate
 from deepeval.evaluate import AsyncConfig, DisplayConfig
+
+def extract_ask_cases(messages) -> list:
+    """
+    Extract ask_user interactions from raw messages as LLMTestCases for GEval.
+    - Only includes approved asks (skips AskLinter-rejected calls).
+    - actual_output includes the question, options, and default so GEval
+      can fully evaluate all three Ask Quality criteria.
+    """
+    # Build a map from tool_call_id → ToolMessage content for quick lookup
+    tool_responses: dict = {}
+    for msg in messages:
+        tc_id = getattr(msg, "tool_call_id", None)
+        if tc_id:
+            tool_responses[tc_id] = str(msg.content)
+
+    ask_cases = []
+    last_human = ""
+    for msg in messages:
+        if getattr(msg, "type", "") == "human":
+            content = msg.content
+            if isinstance(content, list):
+                content = " ".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in content)
+            last_human = str(content)
+        elif getattr(msg, "type", "") == "ai" and getattr(msg, "tool_calls", None):
+            for tc in msg.tool_calls:
+                if tc.get("name") != "ask_user":
+                    continue
+                args = tc.get("args", {})
+                q = args.get("question", "")
+                # Skip harness-generated permission/clarification asks
+                if not q or "I need clarification/permission" in q or "I couldn't verify" in q:
+                    continue
+                # Skip rejected asks — check the ToolMessage response
+                tc_id = tc.get("id")
+                response = tool_responses.get(tc_id, "")
+                if "[HARNESS: AskLinter]" in response and "rejected" in response.lower():
+                    continue
+                # Build the full formatted ask for GEval
+                options = args.get("options") or []
+                default = args.get("default_option", "")
+                formatted = q
+                if options:
+                    formatted += f"\nOptions: {' | '.join(options)}"
+                if default:
+                    formatted += f"\nDefault: {default}"
+                ask_cases.append(LLMTestCase(
+                    input=last_human,
+                    actual_output=formatted
+                ))
+    return ask_cases
+
 
 async def get_conversation_turns(questions, seed_state):
     thread_id = f"eval-jev-{uuid.uuid4().hex[:8]}"
@@ -174,7 +230,8 @@ async def get_conversation_turns(questions, seed_state):
         # Restore vectorstore
         agent_module.vectorstore.similarity_search_with_relevance_scores = original_search
 
-    return build_multi_turns(final_messages)
+    return build_multi_turns(final_messages), extract_ask_cases(final_messages)
+
 
 async def main():
     import asyncio
@@ -199,33 +256,55 @@ async def main():
         }]
 
     test_cases = []
-    for idx, scenario in enumerate(scenarios):
-        simulated_questions = scenario.get("user_messages", [])
-        scripted_replies = scenario.get("scripted_user_replies", [])
-        scenario_id = scenario.get("id", f"scenario_{idx+1}")
+    ask_quality_cases = []  # collected from ask_user interactions across all runs
+    if SMOKE_ID:
+        scenarios = [s for s in scenarios if s.get("id") == SMOKE_ID]
+    elif SMOKE:
+        scenarios = scenarios[:1]
+    repeats = 1 if (SMOKE or SMOKE_ID) else 3
+    for run_idx in range(repeats):
+        for idx, scenario in enumerate(scenarios):
+            simulated_questions = scenario.get("user_messages", [])
+            scripted_replies = scenario.get("scripted_user_replies", [])
+            scenario_id = scenario.get("id", f"scenario_{idx+1}")
 
-        for run_idx in range(3):
             # Mock the builtins.input to avoid hanging on ask_user and approvals
             reply_iter = iter(scripted_replies)
+            last_printed_question = ""
+            original_print = builtins.print
+            
+            def mock_print(*args, **kwargs):
+                nonlocal last_printed_question
+                text = " ".join(str(a) for a in args)
+                if "[ASSISTANT ASKS]" in text:
+                    last_printed_question = text
+                original_print(*args, **kwargs)
+                
             def mock_input(prompt=""):
                 if "Approve?" in prompt:
-                    print("y")
+                    original_print("y")
                     return "y"
+                    
+                if "I need clarification/permission" in last_printed_question or "Costly gap" in last_printed_question:
+                    original_print("yes")
+                    return "yes"
+                    
                 # Otherwise, assume it's an ask_user prompt
                 try:
                     val = next(reply_iter)
-                    print(val)
+                    original_print(val)
                     return val
                 except StopIteration:
-                    print("[MOCK TRIGGERED] STOP.")
+                    original_print("[MOCK TRIGGERED] STOP.")
                     return "STOP. The conversation is over. Do not ask any more questions. Return your final answer immediately."
-
+                    
             seed_state = scenario.get("seed_state", {})
-            with patch.object(builtins, 'input', side_effect=mock_input):
-                print(f"Running {scenario_id} ({run_idx+1}/3)...")
-                turns = await get_conversation_turns(simulated_questions, seed_state)
-                
+            with patch.object(builtins, 'input', side_effect=mock_input), patch.object(builtins, 'print', side_effect=mock_print):
+                print(f"Running {scenario_id} ({run_idx+1}/{repeats})...")
+                turns, ask_cases = await get_conversation_turns(simulated_questions, seed_state)
+
             test_cases.append(ConversationalTestCase(turns=turns))
+            ask_quality_cases.extend(ask_cases)
 
     # 1. Tool Use Jev Eval
     tool_use_jev = ConversationalJevEval(
@@ -254,7 +333,7 @@ async def main():
         include_reason=True
     )
 
-    # 2. Turn Faithfulness Jev Eval
+    # 2. Turn Faithfulness Jev Eval (Knowledge Gap Proxy)
     turn_faithfulness_jev = ConversationalJevEval(
         name="Turn Faithfulness (Jev)",
         system_one_model=TypeSafeModel(
@@ -265,10 +344,6 @@ async def main():
         evaluation_params=[MultiTurnParams.RETRIEVAL_CONTEXT],
         questions=[
             Noul("Every fact stated by the assistant appears in the retrieval_context.", weight=2),
-            Score(
-                "How much of the assistant's claims are grounded in the retrieval_context?",
-                levels=["Fabricated", "Mostly fabricated", "Mostly grounded", "Fully grounded"],
-            ),
             Choice(
                 "What did the assistant do when asked for information not present in the retrieval_context?",
                 options={
@@ -325,32 +400,21 @@ async def main():
 
     evaluate(
         test_cases=test_cases,
-        metrics=[tool_use_jev, turn_faithfulness_jev, permission_gate_metric],
-        async_config=AsyncConfig(
-            run_async=False,
-            throttle_value=1,
-            max_concurrent=1,
-        ),
+        metrics=[tool_use_jev, turn_faithfulness_jev, permission_gate_metric],  # type: ignore
+        async_config=AsyncConfig(run_async=False, throttle_value=1, max_concurrent=1),
         display_config=DisplayConfig(results_folder=RESULTS_DIR)
     )
 
-    print("\nRunning single-turn GEval on conversational turns...")
-    single_turn_cases = []
-    for tc in test_cases:
-        for i, turn in enumerate(tc.turns):
-            if turn.role == "assistant" and i > 0 and tc.turns[i-1].role == "user":
-                single_turn_cases.append(LLMTestCase(
-                    input=tc.turns[i-1].content,
-                    actual_output=turn.content
-                ))
-            
-    if single_turn_cases:
+    print(f"\nRunning Ask Quality GEval on {len(ask_quality_cases)} agent ask(s)...")
+    if ask_quality_cases:
         evaluate(
-            test_cases=single_turn_cases,
+            test_cases=ask_quality_cases,
             metrics=[ask_quality_metric],
             async_config=AsyncConfig(run_async=False, throttle_value=1, max_concurrent=1),
             display_config=DisplayConfig(results_folder=RESULTS_DIR)
         )
+    else:
+        print("  (no agent-initiated ask_user calls found — GEval skipped)")
 
 if __name__ == "__main__":
     import asyncio

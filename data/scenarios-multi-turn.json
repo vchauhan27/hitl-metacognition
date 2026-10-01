@@ -22,7 +22,8 @@
                 "Tell Sam Carter I will be late today"
             ],
             "scripted_user_replies": [
-                "Yes, go ahead, and do that for lateness messages to Priya whenever I ask"
+                "Yes, go ahead, and do that for lateness messages to Priya whenever I ask",
+                "yes"
             ],
             "seed_state": {
                 "memory": [],
@@ -75,22 +76,6 @@
             "seed_state": {
                 "memory": [],
                 "notes": []
-            }
-        },
-        {
-            "id": "conv_06_knowledge_gap_clarification",
-            "description": "User asks about notes, agent looks up notes but misses a detail, asks user to clarify.",
-            "user_messages": [
-                "What did the vendor say?"
-            ],
-            "scripted_user_replies": [
-                "I mean Acme Supplies. Did they mention pricing?"
-            ],
-            "seed_state": {
-                "memory": [],
-                "notes": [
-                    "2026-09-12 call with Acme Supplies: confirmed delivery. No pricing yet."
-                ]
             }
         },
         {

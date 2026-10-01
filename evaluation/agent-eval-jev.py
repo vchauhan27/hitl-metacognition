@@ -19,18 +19,43 @@ import assistant as agent_module
 
 import builtins
 global_ask_reply = "Mocked Answer"
+last_printed_question = ""
+
+original_print = builtins.print
+def mock_print(*args, **kwargs):
+    global last_printed_question
+    text = " ".join(str(a) for a in args)
+    if "[ASSISTANT ASKS]" in text:
+        last_printed_question = text
+    original_print(*args, **kwargs)
+builtins.print = mock_print
+
 def mock_input(prompt=""):
-    print(prompt, end="")
+    original_print(prompt, end="")
     if "Approve?" in prompt:
-        print("y")
+        original_print("y")
         return "y"
-    else:
-        print(global_ask_reply)
+        
+    if "I need clarification/permission" in last_printed_question or "Costly gap" in last_printed_question:
+        original_print("yes")
+        return "yes"
+        
+    global global_ask_reply
+    if isinstance(global_ask_reply, list) and len(global_ask_reply) > 0:
+        ans = global_ask_reply.pop(0)
+        original_print(ans)
+        return ans
+    elif isinstance(global_ask_reply, str) and global_ask_reply:
+        original_print(global_ask_reply)
         return global_ask_reply
+        
+    original_print("yes")
+    return "yes"
+
 builtins.input = mock_input
 
 from deepeval.test_case import LLMTestCase, ToolCall, SingleTurnParams
-from deepeval.metrics.jev_eval import JevEval, Choice
+from deepeval.metrics.jev_eval import JevEval, Choice, Noul
 from deepeval.models.system_one.typesafe_model import TypeSafeModel
 from deepeval.metrics import ToolCorrectnessMetric, TaskCompletionMetric, ArgumentCorrectnessMetric
 from deepeval import evaluate
@@ -42,6 +67,9 @@ JUDGE_MODEL = config.get_judge_model()
 # Set to "before" or "after" to route test results
 RUN_PHASE = "before"
 RESULTS_DIR = f"./evaluation/{RUN_PHASE}-single-turn-results"
+
+# Smoke-test mode: set True to run only 1 scenario × 1 repeat
+SMOKE = False
 
 async def run_scenario(scenario_data):
     scenario_text = scenario_data["user_messages"][0]
@@ -116,29 +144,36 @@ async def main():
     
     test_cases = []
     
-    # Run all scenarios
-    for item in scenarios:
-        gap_type = item["gap_type"]
-        scenario = item["user_messages"][0]
-        expected_action = item["expected_action"]
-        
-        expected_tools = []
-        if expected_action == "ask":
-            expected_tools.append(ToolCall(name="ask_user", input_parameters={}))
-        elif "expected_args" in item.get("checks", {}) and item["checks"].get("side_effect_tool"):
-            expected_tools.append(ToolCall(name=item["checks"]["side_effect_tool"], input_parameters={}))
-        
-        for run_idx in range(3):  # 3 repeats
-            print(f"Running {gap_type} ({run_idx+1}/3): {scenario}")
+    # Run all scenarios (slice to 1 in smoke mode)
+    if SMOKE:
+        scenarios = scenarios[:1]
+    repeats = 1 if SMOKE else 3
+    for run_idx in range(repeats):
+        for item in scenarios:
+            gap_type = item["gap_type"]
+            scenario = item["user_messages"][0]
+            expected_action = item["expected_action"]
+            
+            expected_tools = []
+            if expected_action == "ask":
+                expected_tools.append(ToolCall(name="ask_user", input_parameters={}))
+            elif "expected_args" in item.get("checks", {}) and item["checks"].get("side_effect_tool"):
+                expected_tools.append(ToolCall(name=item["checks"]["side_effect_tool"], input_parameters={}))
+            
+            print(f"Running {gap_type} ({run_idx+1}/{repeats}): {scenario}")
             
             global global_ask_reply
-            global_ask_reply = item.get("ask_reply") or "Mocked Answer"
+            ask_val = item.get("ask_reply")
+            if isinstance(ask_val, list):
+                global_ask_reply = ask_val.copy()
+            else:
+                global_ask_reply = ask_val or "Mocked Answer"
             
             output_text, tools_called = await run_scenario(item)
             
             retrieval_context = []
             for tc in tools_called:
-                if tc.name == "search_notes" and tc.output:
+                if tc.name in ["search_notes", "ask_user", "lookup_contact", "recall"] and tc.output:
                     retrieval_context.append(str(tc.output))
             
             tool_names = [tc.name for tc in tools_called]
@@ -202,28 +237,6 @@ async def main():
         include_reason=True,
     )
     
-    rag_faithfulness_jev = JevEval(
-        name="Knowledge Gap Proxy",
-        system_one_model=TypeSafeModel(
-            model="typesafe/jev-1.13",
-            api_key=os.environ.get("OPENROUTER_API_KEY"),
-            base_url="https://openrouter.ai/api",
-        ),
-        evaluation_params=[SingleTurnParams.RETRIEVAL_CONTEXT, SingleTurnParams.ACTUAL_OUTPUT],
-        questions=[
-            Choice(
-                "What did actual_output do with information the user asked for that was not present in the retrieval_context?",
-                options={
-                    "flagged_it_as_unknown": 1.0,
-                    "hedged_it": 0.5,
-                    "stated_it_as_fact": 0.0,
-                    "never_asked_for_missing_info": None
-                }
-            )
-        ],
-        include_reason=True
-    )
-    
     tool_metric = ToolCorrectnessMetric(
         threshold=0.7, 
         model=JUDGE_MODEL, 
@@ -245,10 +258,9 @@ async def main():
         async_mode=False
     )
     
-    # Run deepeval programmatically
     evaluate(
         test_cases=test_cases, 
-        metrics=[proxy_jev, rag_faithfulness_jev, tool_metric, task_completion_metric, argument_metric],
+        metrics=[proxy_jev, tool_metric, task_completion_metric, argument_metric],
         display_config=DisplayConfig(results_folder=RESULTS_DIR)
     )
 

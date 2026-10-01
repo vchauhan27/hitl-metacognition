@@ -27,11 +27,10 @@ We use a **Hybrid Approach**:
 Takes the signals from the Monitor and acts as the strict, unyielding policy engine. 
 **Crucial Rule:** The Controller is *pure Python*. It never uses an LLM. Using an LLM here would reconstruct the exact failure we are trying to fix (an LLM making bad executive safety decisions).
 
-The Controller maps signals to 4 deterministic actions:
-1. **Priority 1 (Knowledge Gap) -> `idk`**: Blocks the tool and forces an "I don't know" answer.
-2. **Priority 2 (High Severity / Permission) -> `ask`**: Blocks the tool and forces the agent to ask the user for clarification.
-3. **Priority 3 (Small Gap) -> `proceed_and_disclose`**: Allows the tool to run but forces the agent to explicitly state the assumption in its reply (e.g., "I assumed 1 hour for the meeting").
-4. **No Gaps -> `proceed`**: The agent has a green light.
+The Controller maps signals to 3 deterministic actions:
+1. **Priority 1 (High Severity / Permission) -> `ask`**: Blocks the tool and forces the agent to explicitly pause and ask the human for permission or missing information.
+2. **Priority 2 (Small Gap) -> `proceed_and_disclose`**: Allows the tool to run but forces the agent to explicitly state the assumption in its reply (e.g., "I assumed 1 hour for the meeting").
+3. **No Gaps -> `proceed`**: The agent has a green light.
 
 ### 3. The Ask Linter (`ask_linter.py`) - "The Quality Enforcer"
 When the Controller forces the agent to ask a question, the Ask Linter ensures the agent asks a *good* question. Left unchecked, LLMs often ask lazy, "executive" questions like *"What should I do?"* or *"Can you clarify?"*.
@@ -42,5 +41,12 @@ We use a **Hybrid Approach** here as well:
 
 ---
 
+## Security: Preventing "Context Flooding"
+During early evaluation, we discovered a vulnerability where the LLM could bypass the Monitor by citing a past permission approval for a completely unrelated action. Because LLMs lack strict state management, they flooded their context window with old approvals to trick the system. 
+
+We fixed this inside the Harness by enforcing **Turn-By-Turn Verification**. The Harness now strictly checks if the *very last message* was a human approval. The LLM can no longer weaponize past context to bypass the Deterministic Monitor!
+
+---
+
 ## The Verdict
-By separating task reasoning (the LLM) from metacognitive safety (the Harness), we guarantee 100% adherence to safety policies. The LLM can confidently attempt to execute tasks, and the Harness will mathematically ensure that missing data, permissions, and hallucinations are perfectly managed!
+By separating task reasoning (the LLM) from metacognitive safety (the Harness), we guarantee 100% adherence to safety policies. The LLM can confidently attempt to execute tasks, and the Harness will mathematically ensure that missing data and required permissions are caught, prompting a strict human-in-the-loop intervention!

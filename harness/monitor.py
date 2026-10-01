@@ -89,21 +89,37 @@ class JevMonitor:
             log.warning("OPENROUTER_API_KEY not set.")
             return None
 
+        # Build next-7-days calendar so Jev can detect relative-date mismatches
+        today = datetime.date.today()
+        upcoming_days = {
+            (today + datetime.timedelta(days=i)).strftime("%A"): (today + datetime.timedelta(days=i)).isoformat()
+            for i in range(7)
+        }
+
         # Build Jev noul request
         payload = {
             "model": self.model,
             "state": {
                 "user_input": user_input,
                 "proposed_tool": tool_name,
-                "proposed_args": str(tool_args)
+                "proposed_args": str(tool_args),
+                "today_date": today.isoformat(),
+                "today_weekday": today.strftime("%A"),
+                "upcoming_days": str(upcoming_days),
             },
             "questions": {
                 "is_assumed": {
                     "type": "noul",
-                    "instructions": "Did the agent silently assume or guess any of the proposed arguments that were NOT explicitly provided in the user input?",
+                    "instructions": (
+                        "Did the agent silently assume or guess any of the proposed arguments "
+                        "that were NOT explicitly provided in the user input? "
+                        "Pay special attention to dates: if the user said a weekday (e.g. 'Monday') "
+                        "but the proposed date is today's date or does not match the named weekday "
+                        "in upcoming_days, that is a date assumption."
+                    ),
                     "criteria": {
-                        "true": "The agent invented, guessed, or hallucinated arguments (e.g. missing time, missing name).",
-                        "false": "The user input completely and explicitly specifies all the provided arguments."
+                        "true": "The agent invented, guessed, or hallucinated arguments (e.g. missing time, wrong date, missing name).",
+                        "false": "The user input completely and explicitly specifies all the provided arguments, including any dates resolving correctly to named weekdays."
                     }
                 }
             }
@@ -129,6 +145,60 @@ class JevMonitor:
                     gap_type="missing_slot",
                     severity="high",
                     message=f"Generalized Assumption Detected: Agent guessed arguments not in input (confidence: {noul_score:.2f})",
+                    requires_ask=True
+                )
+        except Exception as e:
+            log.warning(f"Jev API call failed: {e}")
+            
+        return None
+
+    def check_knowledge_gap(self, user_input: str, retrieval_context: str, draft_answer: str) -> Optional[MonitorSignal]:
+        """
+        Knowledge Gap: Did the agent state facts in the answer that were not in the retrieval context?
+        """
+        if not self.api_key:
+            return None
+
+        # Build Jev noul request
+        payload = {
+            "model": self.model,
+            "state": {
+                "user_input": user_input,
+                "retrieval_context": retrieval_context,
+                "draft_answer": draft_answer
+            },
+            "questions": {
+                "is_hallucinated": {
+                    "type": "noul",
+                    "instructions": "Did the agent state information as fact in the draft_answer that was NOT supported by the retrieval_context?",
+                    "criteria": {
+                        "true": "The agent hallucinated facts or answered using internal memory instead of the retrieved context.",
+                        "false": "The agent's answer is fully supported by the retrieval_context or it correctly admitted it doesn't know."
+                    }
+                }
+            }
+        }
+        
+        try:
+            response = requests.post(
+                "https://openrouter.ai/api/alpha/decisions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=15.0
+            )
+            response.raise_for_status()
+            result = response.json()
+            
+            noul_score = result.get("answers", {}).get("is_hallucinated", {}).get("noul", 0.0)
+            
+            if noul_score > 0.8:
+                return MonitorSignal(
+                    gap_type="knowledge_gap",
+                    severity="high",
+                    message=f"Knowledge Gap Detected: Answer not supported by retrieved context (confidence: {noul_score:.2f})",
                     requires_ask=True
                 )
         except Exception as e:

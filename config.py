@@ -25,14 +25,46 @@ MEMORY_AGE_LIMIT_DAYS = 30
 # ---------------------------------------------------------
 # LLM & Embeddings
 # ---------------------------------------------------------
+def get_judge_model(): 
 
+    from deepeval.models import OpenRouterModel
+    return OpenRouterModel(
+        model="openai/gpt-oss-120b",
+        api_key=os.environ.get("OPENROUTER_API_KEY"),
+        temperature=0    
+    )
+
+def get_attacker_model():
+    from deepeval.models import OpenRouterModel
+    return OpenRouterModel(
+        model="openai/gpt-oss-120b",
+        api_key=os.environ.get("OPENROUTER_API_KEY"),
+        temperature=0.7    
+    )
+
+def get_redteam_judge_model():
+    # DeepTeam's built-in vulnerabilities require a standard generative LLM 
+    # to evaluate their internal prompts. Jev (TypeSafeModel) cannot be passed 
+    # as the evaluation_model here because it only supports bounded questions.
+   
+    # from deepeval.models import GeminiModel
+    # return GeminiModel(
+    #     model="gemini-3.1-flash-lite",
+    #     temperature=0,
+    from deepeval.models import OpenRouterModel
+    return OpenRouterModel(
+        model="openai/gpt-oss-120b",
+        api_key=os.environ.get("OPENROUTER_API_KEY"),
+        temperature=0    
+    ) 
+    
 def get_llm():
 
     return ChatOpenAI(
-        model="qwen/qwen-2.5-7b-instruct",
+        model="meta-llama/llama-3.3-70b-instruct",
         api_key=os.environ.get("OPENROUTER_API_KEY"),  # type: ignore
         base_url="https://openrouter.ai/api/v1",
-        temperature=0.5,
+        temperature=0.5
     )
 
 def get_jev_model_name():

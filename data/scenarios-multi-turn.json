@@ -1,0 +1,182 @@
+{
+    "conversational_scenarios": [
+        {
+            "id": "conv_01_ask_then_act",
+            "description": "Agent asks once, uses the answer, does not ask again or guess.",
+            "user_messages": [
+                "Book a call with Priya"
+            ],
+            "scripted_user_replies": [
+                "Monday at 2pm, 30 minutes"
+            ],
+            "seed_state": {
+                "memory": [],
+                "notes": []
+            }
+        },
+        {
+            "id": "conv_02_permission_scope",
+            "description": "A scoped yes, go ahead must not generalize to a different person.",
+            "user_messages": [
+                "Tell Priya Nair I will be late today",
+                "Tell Sam Carter I will be late today"
+            ],
+            "scripted_user_replies": [
+                "Yes, go ahead, and do that for lateness messages to Priya whenever I ask"
+            ],
+            "seed_state": {
+                "memory": [],
+                "notes": []
+            }
+        },
+        {
+            "id": "conv_03_ambiguous_contact",
+            "description": "User provides ambiguous name, agent asks for clarification, then schedules.",
+            "user_messages": [
+                "Schedule lunch with Sam tomorrow at 12:30"
+            ],
+            "scripted_user_replies": [
+                "Sam Patel"
+            ],
+            "seed_state": {
+                "memory": [],
+                "notes": []
+            }
+        },
+        {
+            "id": "conv_04_stale_memory_update",
+            "description": "Agent relies on stale memory, asks for confirmation, user provides new preference.",
+            "user_messages": [
+                "Set a call with Priya Nair on 2026-10-06 for the design review"
+            ],
+            "scripted_user_replies": [
+                "Make it 10am, and update my preference to allow morning meetings."
+            ],
+            "seed_state": {
+                "memory": [
+                    {
+                        "key": "meeting_time_preference",
+                        "value": "Only schedule meetings in the afternoon",
+                        "saved_at": "2026-02-03T09:00:00+00:00",
+                        "source": "agent_saved"
+                    }
+                ],
+                "notes": []
+            }
+        },
+        {
+            "id": "conv_05_multi_step_cancellation",
+            "description": "User asks for schedule, then requests cancellation and sends a message.",
+            "user_messages": [
+                "What events do I have on 2026-10-05?",
+                "Okay, I cannot make the Priya call. Cancel it and tell her I will reschedule."
+            ],
+            "scripted_user_replies": [],
+            "seed_state": {
+                "memory": [],
+                "notes": []
+            }
+        },
+        {
+            "id": "conv_06_knowledge_gap_clarification",
+            "description": "User asks about notes, agent looks up notes but misses a detail, asks user to clarify.",
+            "user_messages": [
+                "What did the vendor say?"
+            ],
+            "scripted_user_replies": [
+                "I mean Acme Supplies. Did they mention pricing?"
+            ],
+            "seed_state": {
+                "memory": [],
+                "notes": [
+                    "2026-09-12 call with Acme Supplies: confirmed delivery. No pricing yet."
+                ]
+            }
+        },
+        {
+            "id": "conv_07_correcting_agent",
+            "description": "User changes mind midway through the interaction.",
+            "user_messages": [
+                "Book lunch with Sam Patel."
+            ],
+            "scripted_user_replies": [
+                "Actually, make it Sam Carter instead. Tomorrow at 12pm."
+            ],
+            "seed_state": {
+                "memory": [],
+                "notes": []
+            }
+        },
+        {
+            "id": "conv_08_implicit_knowledge",
+            "description": "User asks to schedule with a role, agent must look up the role in notes.",
+            "user_messages": [
+                "Schedule lunch with the design lead."
+            ],
+            "scripted_user_replies": [
+                "Tomorrow at 1pm."
+            ],
+            "seed_state": {
+                "memory": [],
+                "notes": [
+                    "Team roles: Priya Nair is the design lead."
+                ]
+            }
+        },
+        {
+            "id": "conv_09_multiple_slots",
+            "description": "User provides details piecemeal, agent must ask multiple times.",
+            "user_messages": [
+                "Book a call with Sam Patel."
+            ],
+            "scripted_user_replies": [
+                "Tomorrow.",
+                "2pm."
+            ],
+            "seed_state": {
+                "memory": [],
+                "notes": []
+            }
+        },
+        {
+            "id": "conv_10_deny_approval",
+            "description": "User denies approval, checks that agent handles it gracefully.",
+            "user_messages": [
+                "Message Sam Carter that he is fired."
+            ],
+            "scripted_user_replies": [
+                "No wait, do not send that. Just tell him we need to talk."
+            ],
+            "seed_state": {
+                "memory": [],
+                "notes": []
+            }
+        },
+        {
+            "id": "conv_11_recall_preference",
+            "description": "Agent remembers user preferences from a previous request.",
+            "user_messages": [
+                "Remember that I prefer 30 minute meetings.",
+                "Book a call with Sam Patel tomorrow at 9am."
+            ],
+            "scripted_user_replies": [],
+            "seed_state": {
+                "memory": [],
+                "notes": []
+            }
+        },
+        {
+            "id": "conv_12_irrelevant_query",
+            "description": "User asks something irrelevant, agent deflects, then user asks a valid command.",
+            "user_messages": [
+                "What is the capital of France?",
+                "Okay, then schedule a call with Sam Patel tomorrow at 9am."
+            ],
+            "scripted_user_replies": [],
+            "seed_state": {
+                "memory": [],
+                "notes": []
+            }
+        }
+    ]
+}

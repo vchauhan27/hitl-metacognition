@@ -28,11 +28,9 @@ os.environ.setdefault("DEEPEVAL_PER_ATTEMPT_TIMEOUT_SECONDS_OVERRIDE", "2000")
 # ---------------------------------------------------------------------------
 
 THIS_DIR = Path(__file__).resolve().parent
-ROOT_DIR = THIS_DIR.parent.parent          # repo root (where config.py lives)
-RESEARCH_AGENT_DIR = ROOT_DIR / "customer-support-agent"
+ROOT_DIR = THIS_DIR.parent          # repo root (where config.py lives)
 
 sys.path.append(str(ROOT_DIR))
-sys.path.append(str(RESEARCH_AGENT_DIR))
 
 import config  # noqa: E402  (root config.py)
 
@@ -146,39 +144,88 @@ def build_multi_turns(messages):
 from deepeval import evaluate
 from deepeval.evaluate import AsyncConfig, DisplayConfig
 
-async def get_conversation_turns(questions):
+async def get_conversation_turns(questions, seed_state):
     thread_id = f"eval-jev-{uuid.uuid4().hex[:8]}"
+    user_id = f"eval-user-{uuid.uuid4().hex[:8]}"
+    
+    # Inject seed state memory
+    if "memory" in seed_state:
+        for m in seed_state["memory"]:
+            agent_module.store.put(
+                ("memories", user_id),
+                m["key"],
+                {"value": m["value"], "saved_at": m.get("saved_at", ""), "source": m.get("source", "agent_saved")}
+            )
+            
+    # Mock notes via vectorstore patch for this run
+    notes = seed_state.get("notes", [])
+    original_search = agent_module.vectorstore.similarity_search_with_relevance_scores
+    def mock_similarity_search(query: str, k: int = 4, **kwargs):
+        from langchain_core.documents import Document
+        return [(Document(page_content=n), 0.9) for n in notes][:k]
+    
+    agent_module.vectorstore.similarity_search_with_relevance_scores = mock_similarity_search
+
     final_messages = []
-    for q in questions:
-        final_messages = await run_agent_turn(q, thread_id)
+    try:
+        for q in questions:
+            final_messages = await run_agent_turn(q, thread_id, user_id=user_id)
+    finally:
+        # Restore vectorstore
+        agent_module.vectorstore.similarity_search_with_relevance_scores = original_search
+
     return build_multi_turns(final_messages)
 
 async def main():
     import asyncio
     import json
+    import builtins
+    from unittest.mock import patch
 
     print("Loading simulated multi-turn test case...")
-    json_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'scenarios.json'))
+    json_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'data', 'scenarios-multi-turn.json'))
     
     simulated_questions = []
+    scripted_replies = []
     try:
         with open(json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            # Use the first simulated conversation, filter only the user's questions
-            simulated_questions = data["conversational_scenarios"][0]["user_messages"]
+            scenarios = data.get("conversational_scenarios", [])
     except Exception as e:
         print(f"Warning: Could not load scenarios, falling back to hardcoded. Error: {e}")
-        simulated_questions = [
-            "Book a call with Priya",
-            "Tomorrow at 2pm"
-        ]
+        scenarios = [{
+            "user_messages": ["Book a call with Priya"],
+            "scripted_user_replies": ["Tomorrow at 2pm"]
+        }]
 
-    print("Generating conversation trace from agent...")
-    turns = await get_conversation_turns(simulated_questions)
+    test_cases = []
+    for idx, scenario in enumerate(scenarios):
+        simulated_questions = scenario.get("user_messages", [])
+        scripted_replies = scenario.get("scripted_user_replies", [])
+        scenario_id = scenario.get("id", f"scenario_{idx+1}")
 
-    test_case = ConversationalTestCase(
-        turns=turns,
-    )
+        for run_idx in range(3):
+            # Mock the builtins.input to avoid hanging on ask_user and approvals
+            reply_iter = iter(scripted_replies)
+            def mock_input(prompt=""):
+                if "Approve?" in prompt:
+                    print("y")
+                    return "y"
+                # Otherwise, assume it's an ask_user prompt
+                try:
+                    val = next(reply_iter)
+                    print(val)
+                    return val
+                except StopIteration:
+                    print("[MOCK TRIGGERED] STOP.")
+                    return "STOP. The conversation is over. Do not ask any more questions. Return your final answer immediately."
+
+            seed_state = scenario.get("seed_state", {})
+            with patch.object(builtins, 'input', side_effect=mock_input):
+                print(f"Running {scenario_id} ({run_idx+1}/3)...")
+                turns = await get_conversation_turns(simulated_questions, seed_state)
+                
+            test_cases.append(ConversationalTestCase(turns=turns))
 
     # 1. Tool Use Jev Eval
     tool_use_jev = ConversationalJevEval(
@@ -277,7 +324,7 @@ async def main():
     print("Running multi-turn Jev metrics...")
 
     evaluate(
-        test_cases=[test_case],
+        test_cases=test_cases,
         metrics=[tool_use_jev, turn_faithfulness_jev, permission_gate_metric],
         async_config=AsyncConfig(
             run_async=False,
@@ -289,12 +336,13 @@ async def main():
 
     print("\nRunning single-turn GEval on conversational turns...")
     single_turn_cases = []
-    for i, turn in enumerate(turns):
-        if turn.role == "assistant" and i > 0 and turns[i-1].role == "user":
-            single_turn_cases.append(LLMTestCase(
-                input=turns[i-1].content,
-                actual_output=turn.content
-            ))
+    for tc in test_cases:
+        for i, turn in enumerate(tc.turns):
+            if turn.role == "assistant" and i > 0 and tc.turns[i-1].role == "user":
+                single_turn_cases.append(LLMTestCase(
+                    input=tc.turns[i-1].content,
+                    actual_output=turn.content
+                ))
             
     if single_turn_cases:
         evaluate(

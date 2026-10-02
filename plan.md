@@ -136,15 +136,6 @@ Run `TaskCompletionMetric` and `ArgumentCorrectnessMetric` on the baseline as co
 
 ### Making the agent actually fail
 
-Evaluate and red-team the agent at its best, then add the guard. The prompt stays as strong as you can make it, rules 3 and 4 ("NO GUESSING… call ask_user") included, and so does the model. Weakening the prompt to produce failures would make the comparison unfair.
-
-Two conditions, one variable:
-- **Before**: `assistant.py` with its best prompt and model, no deterministic or Jev guard.
-- **After**: the same agent, same prompt, same model, plus the guard (monitor, controller, ask linter, permission floor).
-
-Freeze the prompt and model between the two, and record the prompt text and model name with every run. Then any difference in the numbers comes from the guard alone.
-
-The failures that remain in the "before" run are the ones a prompt cannot fix. That is the case for the guard: a monitoring failure, by definition, is one where the agent never felt doubt, so no instruction to ask when unsure reaches it.
 
 Monitoring failures need bait. The agent can't notice what looks fine, so build scenarios where it looks fine:
 - A `search_notes` hit with a high score but the wrong vendor.

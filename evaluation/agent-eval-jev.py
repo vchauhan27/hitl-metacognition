@@ -64,6 +64,7 @@ def mock_input(prompt=""):
                     break
             if not match and last_default_option:
                 original_print(last_default_option)
+                global_ask_reply.pop(0) # FIX: Pop the reply so it doesn't loop infinitely
                 return last_default_option
 
         ans = global_ask_reply.pop(0)
@@ -93,7 +94,7 @@ import config
 JUDGE_MODEL = config.get_judge_model()
 
 # Set to "before" or "after" to route test results (override with env var RUN_PHASE)
-RUN_PHASE = os.environ.get("RUN_PHASE", "before")
+RUN_PHASE = os.environ.get("RUN_PHASE", "after" if config.HARNESS_ENABLED else "before")
 RESULTS_DIR = f"./evaluation/{RUN_PHASE}-single-turn-results"
 
 # Smoke-test mode: set True (or env SMOKE=1) to run only 1 scenario x 1 repeat

@@ -51,7 +51,8 @@ from deepeval.models.system_one.typesafe_model import TypeSafeModel
 EVAL_MODEL = config.get_judge_model()   # judge model object (provider set in config.py)
 
 # Set to "before" or "after" to route test results
-RUN_PHASE = os.environ.get("RUN_PHASE", "before")
+from config import HARNESS_ENABLED  # noqa: E402
+RUN_PHASE = os.environ.get("RUN_PHASE", "after" if HARNESS_ENABLED else "before")
 RESULTS_DIR = f"./evaluation/{RUN_PHASE}-multi-turn-results"
 
 # Smoke-test mode: set True to run only 1 scenario × 1 repeat
@@ -150,7 +151,7 @@ def make_io(scenario, original_print):
             ans = "y" if v.lower().startswith("y") else "n"
             original_print(ans)
             return ans
-        if "i need clarification/permission" in low or "costly gap" in low:
+        if ("i need clarification/permission" in low or "costly gap" in low) and "outdated" not in low:
             v = next(harness, "yes")
             original_print(v)
             return v

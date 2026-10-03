@@ -21,6 +21,8 @@ ARM = "C" # Active arm: "A" (bare), "B" (prompt-only), "C" (harness)
 RETRIEVAL_THRESHOLD = 0.5
 JEV_VAGUE_THRESHOLD = 0.85
 MEMORY_AGE_LIMIT_DAYS = 30
+# Harness on/off. Default follows ARM ("C" = harness). Override with env HARNESS=0/1.
+HARNESS_ENABLED = os.environ.get("HARNESS", "1" if ARM == "C" else "0") == "1"
 
 # ---------------------------------------------------------
 # LLM & Embeddings
@@ -62,7 +64,8 @@ def get_llm():
 
     # from langchain_google_genai import ChatGoogleGenerativeAI
     # return ChatGoogleGenerativeAI(
-    #     model="gemini-2.5-flash-lite",
+    #     model="gemini-3.1-flash-lite",
+    #     api_key=os.environ.get("GOOGLE_API_KEY"),
     #     temperature=0,
     # )
 

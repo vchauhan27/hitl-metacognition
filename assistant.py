@@ -13,11 +13,10 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.store.memory import InMemoryStore
 from dataclasses import dataclass
 
-from config import get_llm, get_embeddings, CHROMA_COLLECTION, CHROMA_DIR
+from config import get_llm, get_embeddings, CHROMA_COLLECTION, CHROMA_DIR, HARNESS_ENABLED
 
-# from harness.monitor import DeterministicMonitor, JevMonitor
-# from harness.controller import Controller
-# from harness.ask_linter import AskLinter
+from harness.wrapper import HarnessModelWrapper, PERMISSION_PREFIX
+from harness.failures.executive_asking import AskLinter
 
 # ---------------------------------------------------------
 # Environment
@@ -52,155 +51,14 @@ class Context:
 
 model_base = get_llm()
 
-# class HarnessModelWrapper:
-#     def __init__(self, model):
-#         self.model = model
-#         self.det_monitor = DeterministicMonitor()
-#         self.jev_monitor = JevMonitor()
-#         self.controller = Controller()
-# 
-#     def bind_tools(self, *args, **kwargs):
-#         return HarnessModelWrapper(self.model.bind_tools(*args, **kwargs))
-# 
-#     def with_config(self, *args, **kwargs):
-#         return HarnessModelWrapper(self.model.with_config(*args, **kwargs))
-#         
-#     def _apply_harness(self, input_data, ai_message):
-#         # Extract user input for JevMonitor and check for recent permissions
-#         user_inputs = []
-#         approved_tools = set()
-#         messages = input_data.get("messages", []) if isinstance(input_data, dict) else input_data
-#         
-#         for i, m in enumerate(messages):
-#             if getattr(m, "type", None) == "human" or getattr(m, "__class__", None) and m.__class__.__name__ == "HumanMessage":
-#                 content = m.content
-#                 if isinstance(content, list):
-#                     content = " ".join(p.get("text", "") for p in content if isinstance(p, dict))
-#                 user_inputs.append(str(content))
-#                 approved_tools.clear() # Reset permissions on new human message
-#             elif getattr(m, "type", None) == "tool" or getattr(m, "__class__", None) and m.__class__.__name__ == "ToolMessage":
-#                 if getattr(m, "name", None) == "ask_user":
-#                     ans = str(m.content).strip().lower()
-#                     user_inputs.append(ans)
-#                     if ans in ["yes", "y", "sure", "ok", "approve"]:
-#                         if i > 0:
-#                             prev_m = messages[i-1]
-#                             if getattr(prev_m, "type", None) == "ai" or getattr(prev_m, "__class__", None) and prev_m.__class__.__name__ == "AIMessage":
-#                                 for tcall in getattr(prev_m, "tool_calls", []):
-#                                     if tcall.get("name") == "ask_user":
-#                                         q = tcall.get("args", {}).get("question", "")
-#                                         import re
-#                                         match = re.search(r"run (\w+) with args", q)
-#                                         if match:
-#                                             approved_tools.add(match.group(1))
-# 
-# 
-#         combined_user_input = "\n".join(user_inputs)
-# 
-#         # Collect retrieval context for Knowledge Gap monitor.
-#         # Includes: search_notes output, lookup_contact output, recall output,
-#         # ask_user responses, and raw human messages — all are grounded sources.
-#         retrieval_context_parts = []
-#         if messages:
-#             for m in messages:
-#                 is_tool_msg = (
-#                     getattr(m, "type", None) == "tool"
-#                     or (getattr(m, "__class__", None) and m.__class__.__name__ == "ToolMessage")
-#                 )
-#                 is_human_msg = (
-#                     getattr(m, "type", None) == "human"
-#                     or (getattr(m, "__class__", None) and m.__class__.__name__ == "HumanMessage")
-#                 )
-#                 if is_tool_msg:
-#                     tool_name = getattr(m, "name", None)
-#                     # Read tools: direct retrieval sources
-#                     # Write tools: their output IS grounding for the confirmation message
-#                     # (e.g. "Event created: Call with Priya on 2026-10-05 at 14:00"
-#                     #  grounds "I've booked your call for Monday at 2pm")
-#                     if tool_name in (
-#                         "search_notes", "lookup_contact", "recall", "ask_user",
-#                         "create_event", "send_message", "move_event", "remember",
-#                         "get_calendar",
-#                     ):
-#                         retrieval_context_parts.append(str(m.content))
-#                 elif is_human_msg:
-#                     content = m.content
-#                     if isinstance(content, list):
-#                         content = " ".join(p.get("text", "") for p in content if isinstance(p, dict))
-#                     retrieval_context_parts.append(str(content))
-#         retrieval_context = "\n".join(retrieval_context_parts)
-# 
-#         new_tool_calls = []
-#         forced_content = ai_message.content or ""
-# 
-#         # No tool calls and no content — nothing to intercept
-#         if not getattr(ai_message, "tool_calls", None):
-#             return ai_message
-# 
-# 
-#         
-#         for tc in ai_message.tool_calls:
-#             signals = []
-#             
-#             # Skip all checks if the user explicitly approved via ask_user
-#             has_permission = tc["name"] in approved_tools
-#             if not has_permission:
-#                 sig = self.det_monitor.check_permission(tc["name"])
-#                 if sig:
-#                     print(f"\n[HARNESS: DeterministicMonitor] {sig.message}")
-#                     sig.message = f"[DeterministicMonitor] {sig.message}"
-#                     signals.append(sig)
-#                 
-#                 if tc["name"] != "ask_user":
-#                     sig = self.jev_monitor.check_assumptions(combined_user_input, tc["name"], tc["args"])
-#                     if sig:
-#                         print(f"\n[HARNESS: JevMonitor] {sig.message}")
-#                         sig.message = f"[JevMonitor] {sig.message}"
-#                         signals.append(sig)
-#                 
-#             action = self.controller.decide(signals)
-#             if action.action != "proceed":
-#                 print(f"[HARNESS: Controller] Overriding agent to: {action.action.upper()}")
-#             
-#             if action.action == "idk":
-#                 ai_message.content = "I don't know."
-#                 ai_message.tool_calls = []
-#                 return ai_message
-#             elif action.action == "ask":
-#                 question = f"I need clarification/permission to run {tc['name']} with args {tc['args']}. Reason: [HARNESS: Controller] {action.reason}"
-#                 tc["name"] = "ask_user"
-#                 tc["args"] = {
-#                     "question": question,
-#                     "options": ["yes", "no"],
-#                     "default_option": "no"
-#                 }
-#                 new_tool_calls.append(tc)
-#             elif action.action == "proceed_and_disclose":
-#                 if not forced_content:
-#                     forced_content = ""
-#                 forced_content += f"\n[Disclosure: {action.reason}]"
-#                 new_tool_calls.append(tc)
-#             else:
-#                 new_tool_calls.append(tc)
-#                 
-#         ai_message.tool_calls = new_tool_calls
-#         if forced_content:
-#             ai_message.content = forced_content.strip()
-#         return ai_message
-# 
-#     def invoke(self, input_data, config=None, **kwargs):
-#         res = self.model.invoke(input_data, config=config, **kwargs)
-#         return self._apply_harness(input_data, res)
-# 
-#     async def ainvoke(self, input_data, config=None, **kwargs):
-#         res = await self.model.ainvoke(input_data, config=config, **kwargs)
-#         return self._apply_harness(input_data, res)
-#         
-#     def __getattr__(self, name):
-#         return getattr(self.model, name)
-# 
-# model = HarnessModelWrapper(model_base)
-model = model_base
+# long memory — created before the model so it can be injected into the harness
+store = InMemoryStore()
+
+# Harness ("after" run): wraps the model, couples failures/* modules to every tool call.
+# HARNESS=0 reproduces the prompt-only "before" baseline.
+model = HarnessModelWrapper(model_base, store=store, contacts=CONTACTS) if HARNESS_ENABLED else model_base
+print(f"[HARNESS] {'ENABLED' if HARNESS_ENABLED else 'DISABLED'}")
+
 embeddings = get_embeddings()
 
 vectorstore = Chroma(
@@ -210,8 +68,6 @@ vectorstore = Chroma(
 )
 
 checkpointer = MemorySaver()
-# long memory
-store = InMemoryStore()
 
 # ---------------------------------------------------------
 # 2. Tools
@@ -272,7 +128,7 @@ def recall(runtime: ToolRuntime[Context]) -> str:
         return "No memories yet."
     return "\n".join(f"{i.key}: {i.value['value']} (saved {i.value['saved_at']})" for i in items)
 
-# linter = AskLinter()
+linter = AskLinter() if HARNESS_ENABLED else None
 
 @tool
 def ask_user(question: str, options: list[str], default_option: str) -> str:
@@ -280,12 +136,14 @@ def ask_user(question: str, options: list[str], default_option: str) -> str:
     Use when a needed detail is missing or ambiguous.
     CRITICAL: `options` must be a list of at least two specific choices. `default_option` must be one of the `options`.
     """
-#     feedback = linter.lint(question, options, default_option)
-#     if not feedback.is_valid:
-#         print(f"\n[HARNESS: AskLinter] Rejected question: {feedback.feedback}")
-#         return f"[HARNESS: AskLinter] {feedback.feedback}"
-#     else:
-#         print(f"\n[HARNESS: AskLinter] Approved question format.")
+    # Executive-asking fix: lint agent-authored asks. Harness-generated permission asks
+    # are structured by construction, so they skip the linter.
+    if linter and not question.startswith(PERMISSION_PREFIX):
+        feedback = linter.lint(question, options, default_option)
+        if not feedback.is_valid:
+            print(f"\n[HARNESS: AskLinter] Rejected question: {feedback.feedback}")
+            return f"[HARNESS: AskLinter] {feedback.feedback}"
+        print(f"\n[HARNESS: AskLinter] Approved question format.")
 
     print(f"\n[ASSISTANT ASKS] {question}")
     if options:
@@ -304,10 +162,12 @@ def ask_user(question: str, options: list[str], default_option: str) -> str:
 SYSTEM_PROMPT = (
     "You are a professional personal assistant. Today is {today} ({weekday}).\n\n"
     "Core principles:\n"
-    "- Ask before acting. Confirm every missing or ambiguous detail with the user before calling any tool.\n"
-    "- Never guess. If a name, date, time, or contact is not explicitly provided, use your tools to look it up or ask.\n"
-    "- Resolve names via tools. Use `lookup_contact` for people and `search_notes` for roles or context.\n"
-    "- Resolve dates precisely. Convert relative terms like 'Monday' or 'tomorrow' to a concrete date before acting.\n"
+    "- Ask before acting ONLY when a detail is missing. If all information is provided, DO NOT ask for permission, just execute the tool.\n"
+    "- Never guess. If a name, time, or contact is not explicitly provided, use your tools to look it up or ask.\n"
+    "- Always check memory via `recall` before scheduling events to respect user preferences.\n"
+    "- Do not send messages or notifications unless explicitly requested by the user.\n"
+    "- Resolve names via tools. Always use `search_notes` to look up roles or context before choosing to ask the user. Use `lookup_contact` for people.\n"
+    "- Resolve dates precisely. Calculate the ISO date silently based on today's date. Do not ask the user to confirm relative dates (e.g., 'tomorrow').\n"
     "- Scope permissions narrowly. A user approval for one action does not cover other actions or recipients.\n"
     "- Act once. If a tool has already succeeded, do not repeat that step.\n"
     "- Confirm only facts. Only state what was confirmed by a tool result — do not infer or embellish.\n"
@@ -390,7 +250,7 @@ def main():
                         if hasattr(m, 'content'):
                             summary_prompt += f"{role}: {m.content}\n"
                     
-                    summary = model.invoke([HumanMessage(content=summary_prompt)])
+                    summary = model_base.invoke([HumanMessage(content=summary_prompt)])
                     delete_msgs = [RemoveMessage(id=m.id) for m in old_messages if getattr(m, 'id', None)]
                     summary_msg = AIMessage(content=f"Summary of previous conversation: {summary.content}")
                     

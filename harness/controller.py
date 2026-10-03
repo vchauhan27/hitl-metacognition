@@ -1,8 +1,8 @@
 import logging
 from typing import List
 
-# Import the signal definition from monitor.py
-from harness.monitor import MonitorSignal
+# Shared signal definition (emitted by every module in harness/failures/)
+from harness.failures.signals import MonitorSignal
 
 log = logging.getLogger("controller")
 

@@ -1,6 +1,7 @@
 langchain>=1.0
 langgraph>=1.0
-langchain-openai        
+langchain-openai
+google-genai
 langchain-chroma
 chromadb
 httpx
@@ -9,3 +10,4 @@ deepeval
 deepteam
 langgraph-checkpoint-sqlite
 typesafe-sdk
+langchain-google-genai

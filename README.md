@@ -10,6 +10,8 @@ The framework runs in three isolated test modes (Arms) to evaluate the effective
 - **Arm B (Prompt-only)**: Comprehensive prompt explicitly instructing the model not to guess. Harness runs in shadow mode.
 - **Arm C (Harness)**: Stripped-down prompt. Harness runs in enforce mode (actively blocking and intervening).
 
+> **Before / after in the current evaluation:** the **before run is the prompt-only baseline**. It uses the comprehensive "do not guess / ask before acting" system prompt in `assistant.py` (Arm B style) with the harness fully off and the tools ungated (no `input()` approval inside `create_event` / `send_message`). The **after run** adds the harness on top of the same prompt, model and tools. The comparison therefore measures what the harness adds beyond prompting alone, not a raw unprompted agent.
+
 ## Metacognitive Harness
 To ensure safety and prevent silent assumptions, the agent incorporates a robust metacognitive layer instead of traditional input/output guardrails:
 

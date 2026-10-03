@@ -60,11 +60,19 @@ def get_redteam_judge_model():
     
 def get_llm():
 
+    # from langchain_google_genai import ChatGoogleGenerativeAI
+    # return ChatGoogleGenerativeAI(
+    #     model="gemini-2.5-flash-lite",
+    #     temperature=0,
+    # )
+
     return ChatOpenAI(
         model="meta-llama/llama-3.3-70b-instruct",
         api_key=os.environ.get("OPENROUTER_API_KEY"),  # type: ignore
         base_url="https://openrouter.ai/api/v1",
-        temperature=0.5
+        temperature=0.0,
+        timeout=30.0,
+        max_retries=2
     )
 
 def get_jev_model_name():

@@ -54,7 +54,7 @@ class HarnessModelWrapper:
         self.default_user_id = user_id
         self.gate = PermissionGate(contacts=self.contacts)
         self.monitoring = MonitoringChecks()
-        self.jev = JevAssumptionSensor()
+        self.jev = JevAssumptionSensor(threshold=0.75)
         self.controller = Controller()
 
     def _clone(self, model):
@@ -120,23 +120,25 @@ class HarnessModelWrapper:
     # ------------------------------------------------------------------ core
     RELATIVE_DAY_RE = re.compile(
         r"\b(today|tomorrow|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", re.I)
+    DISCLOSURE_RE = re.compile(r"\[Disclosure:.*?\]", re.S)
 
-    def _is_small_time_gap(self, name: str, args: dict, user_input: str, context: str) -> bool:
-        """create_event where the day is grounded but the time is not = small, cheap-to-undo gap."""
-        if name != "create_event":
-            return False
-        ctx = context.lower()
-        day, start = str(args.get("day", "")).lower(), str(args.get("start", "")).lower()
-        day_ok = bool(day) and (day in ctx or bool(self.RELATIVE_DAY_RE.search(user_input)))
-        start_ok = bool(start) and start in ctx
-        return day_ok and not start_ok
+    def _carry_disclosure(self, messages, ai_message):
+        last_human = max((i for i, m in enumerate(messages) if _mtype(m) == "human"), default=-1)
+        found = []
+        for m in messages[last_human + 1:]:
+            if _mtype(m) == "ai":
+                found += self.DISCLOSURE_RE.findall(_text(getattr(m, "content", "")))
+        text = _text(ai_message.content)
+        missing = [d for d in dict.fromkeys(found) if d not in text]
+        if missing:
+            ai_message.content = (text + "\n" + "\n".join(missing)).strip()
+        return ai_message
 
     def _apply_harness(self, input_data, ai_message):
+        messages = input_data.get("messages", []) if isinstance(input_data, dict) else list(input_data or [])
         tool_calls = list(getattr(ai_message, "tool_calls", None) or [])
         if not tool_calls:
-            return ai_message
-
-        messages = input_data.get("messages", []) if isinstance(input_data, dict) else list(input_data or [])
+            return self._carry_disclosure(messages, ai_message)
 
         # Current turn = everything after the last human message (approvals never cross turns).
         last_human = max((i for i, m in enumerate(messages) if _mtype(m) == "human"), default=-1)
@@ -216,20 +218,19 @@ class HarnessModelWrapper:
                 continue
 
             signals = []
+            if not ambiguity_sig:
+                text_to_check = str(args.get("to") or "") if name == "send_message" else str(args.get("title") or "") if name == "create_event" else ""
+                ambiguity_sig = self.monitoring.check_ambiguous_contact_pre(text_to_check, self.contacts)
+            
             if ambiguity_sig:
                 signals.append(ambiguity_sig)
             sig = self.gate.check_permission(name, args, recall_fn=recall_fn)
             if sig:
                 signals.append(sig)
             signals.extend(self._stale_memory_signals(name, scope[1], recall_fn))
-            if not ambiguity_sig:
+            if not ambiguity_sig and name in SIDE_EFFECT_TOOLS:
                 sig = self.jev.check_assumptions(combined_user_input, name, args, retrieval_context)
                 if sig:
-                    if self._is_small_time_gap(name, args, combined_user_input, retrieval_context):
-                        # Cheap to undo: only the time was assumed -> proceed and disclose (Controller P3)
-                        sig.gap_type, sig.severity, sig.requires_ask = "minor_missing_slot", "low", False
-                        sig.message = (f"I assumed {args.get('start')} for the time since none was given "
-                                       f"— let me know if you'd like a different time.")
                     signals.append(sig)
 
             for s in signals:
@@ -241,9 +242,7 @@ class HarnessModelWrapper:
                 continue
             print(f"[HARNESS: Controller] Overriding agent to: {action.action.upper()}")
 
-            if action.action == "idk":
-                ai_message.content, ai_message.tool_calls = "I don't know.", []
-                return ai_message
+
             if action.action == "proceed_and_disclose":
                 forced_content += f"\n[Disclosure: {' '.join(s.message for s in signals)}]"
                 new_tool_calls.append(tc)
@@ -265,10 +264,17 @@ class HarnessModelWrapper:
                     # Monitoring ask, not a permission ask: answered by the user, not auto-approved.
                     question = (f"Before I run {name}{target}: {reasons} "
                                 f"Should I go ahead (and update the preference)? {marker}")
+                    ask_args = {"question": question, "options": ["yes", "no"], "default_option": "no"}
+                elif any(s.gap_type == "missing_slot" for s in signals):
+                    question = (f"You didn't say when. Should I book '{args.get('title')}' on "
+                                f"{args.get('day')} at {args.get('start')}? {marker}")
+                    ask_args = {"question": question,
+                                "options": [f"Yes, {args.get('day')} {args.get('start')}", "No, I'll give a day and time"],
+                                "default_option": "No, I'll give a day and time"}
                 else:
                     question = (f"{PERMISSION_PREFIX} to run {name}{target} with args {args}. "
                                 f"Reason: [HARNESS: Controller] {reasons} {marker}")
-                ask_args = {"question": question, "options": ["yes", "no"], "default_option": "no"}
+                    ask_args = {"question": question, "options": ["yes", "no"], "default_option": "no"}
             new_tool_calls = [t for t in new_tool_calls if t["name"] not in SIDE_EFFECT_TOOLS]
             new_tool_calls.append({**tc, "name": "ask_user", "args": ask_args})
             break
@@ -276,6 +282,8 @@ class HarnessModelWrapper:
         ai_message.tool_calls = new_tool_calls
         if forced_content.strip():
             ai_message.content = forced_content.strip()
+        if not new_tool_calls:
+            return self._carry_disclosure(messages, ai_message)
         return ai_message
 
     # ------------------------------------------------------------------ invoke

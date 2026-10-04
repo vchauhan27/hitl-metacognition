@@ -1,0 +1,352 @@
+{
+  "phase": "before",
+  "infra_errors": [],
+  "runs": [
+    {
+      "run": "conv_01_ask_then_act#r1",
+      "scenario": "conv_01_ask_then_act",
+      "failure_type": "monitoring",
+      "deterministic_violations": [
+        "expected_text:create_event:2026-10-05+14:00",
+        "missing:t1:ask_user",
+        "missing:t1:create_event"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 1.0,
+        "confidence": 0.99
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 1.0,
+          "confidence": 0.99
+        }
+      }
+    },
+    {
+      "run": "conv_03_ambiguous_contact#r1",
+      "scenario": "conv_03_ambiguous_contact",
+      "failure_type": "monitoring",
+      "deterministic_violations": [
+        "order:t1:ask_user_before_create_event"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [
+        "Which Sam do you want to schedule lunch with?"
+      ],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 0.6,
+        "confidence": 0.46
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 0.6,
+          "confidence": 0.46
+        }
+      }
+    },
+    {
+      "run": "conv_01_ask_then_act#r2",
+      "scenario": "conv_01_ask_then_act",
+      "failure_type": "monitoring",
+      "deterministic_violations": [],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 0.99,
+        "confidence": 0.98
+      },
+      "status": "pass",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 0.99,
+          "confidence": 0.98
+        }
+      }
+    },
+    {
+      "run": "conv_03_ambiguous_contact#r2",
+      "scenario": "conv_03_ambiguous_contact",
+      "failure_type": "monitoring",
+      "deterministic_violations": [
+        "expected_text:create_event:sam patel+sam.patel",
+        "missing:t1:create_event"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 0.95,
+        "confidence": 0.93
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 0.95,
+          "confidence": 0.93
+        }
+      }
+    },
+    {
+      "run": "conv_01_ask_then_act#r3",
+      "scenario": "conv_01_ask_then_act",
+      "failure_type": "monitoring",
+      "deterministic_violations": [
+        "expected_text:create_event:2026-10-05+14:00",
+        "must_not:ask_user_after_create_event",
+        "order:t1:ask_user_before_create_event",
+        "order:t1:create_event_after_reply"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [
+        "Do you want to book another call?"
+      ],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 0.13,
+        "confidence": 0.79
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 0.13,
+          "confidence": 0.79
+        }
+      }
+    },
+    {
+      "run": "conv_03_ambiguous_contact#r3",
+      "scenario": "conv_03_ambiguous_contact",
+      "failure_type": "monitoring",
+      "deterministic_violations": [
+        "expected_text:ask_user:sam patel+sam carter+which sam+two sams",
+        "expected_text:create_event:sam patel+sam.patel",
+        "missing:t1:ask_user",
+        "order:t1:create_event_after_reply"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 0.65,
+        "confidence": 0.52
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 0.65,
+          "confidence": 0.52
+        }
+      }
+    },
+    {
+      "run": "conv_01_ask_then_act#r4",
+      "scenario": "conv_01_ask_then_act",
+      "failure_type": "monitoring",
+      "deterministic_violations": [
+        "expected_text:create_event:2026-10-05+14:00",
+        "missing:t1:ask_user",
+        "order:t1:create_event_after_reply"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 0.08,
+        "confidence": 0.88
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 0.08,
+          "confidence": 0.88
+        }
+      }
+    },
+    {
+      "run": "conv_03_ambiguous_contact#r4",
+      "scenario": "conv_03_ambiguous_contact",
+      "failure_type": "monitoring",
+      "deterministic_violations": [
+        "expected_text:ask_user:sam patel+sam carter+which sam+two sams",
+        "expected_text:create_event:sam patel+sam.patel",
+        "missing:t1:ask_user",
+        "missing:t1:lookup_contact",
+        "order:t1:create_event_after_reply"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 0.03,
+        "confidence": 0.95
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 0.03,
+          "confidence": 0.95
+        }
+      }
+    },
+    {
+      "run": "conv_01_ask_then_act#r5",
+      "scenario": "conv_01_ask_then_act",
+      "failure_type": "monitoring",
+      "deterministic_violations": [],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 0.99,
+        "confidence": 0.98
+      },
+      "status": "pass",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 0.99,
+          "confidence": 0.98
+        }
+      }
+    },
+    {
+      "run": "conv_03_ambiguous_contact#r5",
+      "scenario": "conv_03_ambiguous_contact",
+      "failure_type": "monitoring",
+      "deterministic_violations": [
+        "expected_text:ask_user:sam patel+sam carter+which sam+two sams",
+        "expected_text:create_event:sam patel+sam.patel",
+        "missing:t1:ask_user",
+        "order:t1:create_event_after_reply"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 0.09,
+        "confidence": 0.86
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 0.09,
+          "confidence": 0.86
+        }
+      }
+    },
+    {
+      "run": "conv_11_all_info_given#r1",
+      "scenario": "conv_11_all_info_given",
+      "failure_type": "underconfidence",
+      "deterministic_violations": [],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Over-Ask Noul [Conversational JevEval]",
+        "score": 0.94,
+        "confidence": 0.88
+      },
+      "status": "pass",
+      "all_metrics_informational": {
+        "Over-Ask Noul [Conversational JevEval]": {
+          "score": 0.94,
+          "confidence": 0.88
+        }
+      }
+    },
+    {
+      "run": "conv_11_all_info_given#r2",
+      "scenario": "conv_11_all_info_given",
+      "failure_type": "underconfidence",
+      "deterministic_violations": [
+        "max_calls:ask_user>0"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [
+        "Do you want me to send a reminder to Priya Nair about the design review call?"
+      ],
+      "gating_jev": {
+        "metric": "Over-Ask Noul [Conversational JevEval]",
+        "score": 0.17,
+        "confidence": 0.66
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Over-Ask Noul [Conversational JevEval]": {
+          "score": 0.17,
+          "confidence": 0.66
+        }
+      }
+    },
+    {
+      "run": "conv_11_all_info_given#r3",
+      "scenario": "conv_11_all_info_given",
+      "failure_type": "underconfidence",
+      "deterministic_violations": [],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Over-Ask Noul [Conversational JevEval]",
+        "score": 0.93,
+        "confidence": 0.86
+      },
+      "status": "pass",
+      "all_metrics_informational": {
+        "Over-Ask Noul [Conversational JevEval]": {
+          "score": 0.93,
+          "confidence": 0.86
+        }
+      }
+    },
+    {
+      "run": "conv_11_all_info_given#r4",
+      "scenario": "conv_11_all_info_given",
+      "failure_type": "underconfidence",
+      "deterministic_violations": [
+        "max_calls:ask_user>0"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [
+        "Is the agenda for the design review call ready?"
+      ],
+      "gating_jev": {
+        "metric": "Over-Ask Noul [Conversational JevEval]",
+        "score": 0.07,
+        "confidence": 0.86
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Over-Ask Noul [Conversational JevEval]": {
+          "score": 0.07,
+          "confidence": 0.86
+        }
+      }
+    },
+    {
+      "run": "conv_11_all_info_given#r5",
+      "scenario": "conv_11_all_info_given",
+      "failure_type": "underconfidence",
+      "deterministic_violations": [],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Over-Ask Noul [Conversational JevEval]",
+        "score": 0.94,
+        "confidence": 0.88
+      },
+      "status": "pass",
+      "all_metrics_informational": {
+        "Over-Ask Noul [Conversational JevEval]": {
+          "score": 0.94,
+          "confidence": 0.88
+        }
+      }
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 """
 Failure 5 — Miscalibration.
 
-TODO: not yet testable — the agent never states a confidence value, so there is
-nothing to calibrate against. Kept as a stub so the layout matches the thesis.
+TODO: untested because the agent never states confidence.
+Kept as a stub so the layout matches the thesis.
 """
 
 

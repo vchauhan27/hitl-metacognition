@@ -8,7 +8,7 @@ log = logging.getLogger("controller")
 
 class ControllerAction:
     def __init__(self, action: str, reason: str, signals: List[MonitorSignal]):
-        # Valid actions: 'proceed', 'proceed_and_disclose', 'ask', 'idk'
+        # Valid actions: 'proceed', 'proceed_and_disclose', 'ask'
         self.action = action
         self.reason = reason
         self.signals = signals
@@ -32,7 +32,7 @@ class Controller:
     def decide(self, signals: List[MonitorSignal]) -> ControllerAction:
         """
         Evaluate the signals and return the safest bounded action.
-        Precedence: idk > ask > proceed_and_disclose > proceed
+        Precedence: ask > proceed_and_disclose > proceed
         """
         if not signals:
             return ControllerAction("proceed", "No gaps detected. High confidence.", [])

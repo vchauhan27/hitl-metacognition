@@ -63,6 +63,37 @@ class MonitoringChecks:
         matches = [line for line in str(tool_output).splitlines() if "@" in line]
         return self.check_ambiguous_contact(matches)
 
+    def check_ambiguous_contact_pre(self, text: str, contacts: dict) -> Optional[MonitorSignal]:
+        """Pre-check: looks for ambiguous first names in side-effect tool arguments."""
+        if not text:
+            return None
+        text_l = text.lower()
+        words = text_l.split()
+        
+        # Check if any full name or email is present exactly; if so, not ambiguous for that person
+        for name, info in contacts.items():
+            if name.lower() in text_l or info.split()[0].lower() in text_l:
+                return None
+                
+        # Group contacts by first name
+        by_first = {}
+        for name in contacts:
+            first = name.split()[0].lower()
+            by_first.setdefault(first, []).append(name)
+            
+        # If the text contains a first name that maps to multiple contacts, it's ambiguous
+        for first, full_names in by_first.items():
+            if first in words and len(full_names) > 1:
+                return MonitorSignal(
+                    gap_type="ambiguity",
+                    severity="high",
+                    message=f"I found {len(full_names)} matching contacts for '{first}': {', '.join(full_names)}. Which one do you mean?",
+                    requires_ask=True,
+                    failure_type="monitoring",
+                    options=full_names,
+                )
+        return None
+
 
 class JevAssumptionSensor:
     """Fuzzy detectors via Jev (invented args, ungrounded answers)."""
@@ -72,30 +103,12 @@ class JevAssumptionSensor:
         self.api_key = os.environ.get("OPENROUTER_API_KEY")
         self.threshold = threshold
 
-    @staticmethod
-    def _args_are_grounded(tool_args: dict, retrieval_context: str) -> bool:
-        """Skip Jev entirely if every arg value already appears verbatim in grounded context."""
-        ctx = (retrieval_context or "").lower()
-        for k, v in tool_args.items():
-            if not str(v).strip():
-                continue
-            # Skip dates/days from string matching because LLM computes them accurately
-            # from relative words ("tomorrow") which breaks verbatim matching.
-            if k in ("day", "date"):
-                continue
-            if str(v).lower() not in ctx:
-                return False
-        return True
-
     def check_assumptions(self, user_input: str, tool_name: str, tool_args: dict, retrieval_context: str = "") -> Optional[MonitorSignal]:
         """
         Missing Slot & Vague Wording: Did the agent invent arguments?
         """
         if not self.api_key:
             log.warning("OPENROUTER_API_KEY not set.")
-            return None
-            
-        if self._args_are_grounded(tool_args, retrieval_context):
             return None
 
         # Build next-7-days calendar so Jev can detect relative-date mismatches
@@ -131,6 +144,18 @@ class JevAssumptionSensor:
                         "true": "The agent invented, guessed, or hallucinated arguments (e.g. missing time, wrong date, missing name).",
                         "false": "The user input completely and explicitly specifies all the provided arguments, including any dates resolving correctly to named weekdays."
                     }
+                },
+                "is_costly": {
+                    "type": "noul",
+                    "instructions": (
+                        "If the agent assumed any arguments, would a wrong guess be costly or hard to undo? "
+                        "A wrong or missing date, a wrong or unconfirmed person, or an unconfirmed recipient is costly. "
+                        "A missing time of day or a minor default is cheap."
+                    ),
+                    "criteria": {
+                        "true": "A wrong guess would be costly: wrong day, wrong person, or hard to reverse.",
+                        "false": "A wrong guess is cheap to fix, such as a default time of day."
+                    }
                 }
             }
         }
@@ -148,16 +173,21 @@ class JevAssumptionSensor:
             response.raise_for_status()
             result = response.json()
             
-            noul_score = result.get("answers", {}).get("is_assumed", {}).get("noul", 0.0)
-            
-            if noul_score > self.threshold:
+            ans = result.get("answers", {})
+            assumed = ans.get("is_assumed", {}).get("noul", 0.0)
+            costly = ans.get("is_costly", {}).get("noul", 0.0)
+
+            if assumed <= self.threshold:
+                return None
+            if costly > self.threshold:
                 return MonitorSignal(
-                    gap_type="missing_slot",
-                    severity="high",
-                    message=f"Agent guessed arguments not in input (confidence: {noul_score:.2f}).",
-                    requires_ask=True,
-                    failure_type="monitoring"
-                )
+                    gap_type="missing_slot", severity="high",
+                    message=f"Agent assumed costly details not in the input (confidence: {assumed:.2f}).",
+                    requires_ask=True, failure_type="monitoring")
+            return MonitorSignal(
+                gap_type="minor_missing_slot", severity="low",
+                message=f"I assumed some details you did not specify ({tool_args}). Tell me if you want them changed.",
+                requires_ask=False, failure_type="monitoring")
         except Exception as e:
             log.warning(f"Jev API call failed: {e}")
             

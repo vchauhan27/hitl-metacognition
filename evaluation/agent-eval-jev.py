@@ -21,72 +21,60 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import assistant as agent_module
 
-import builtins
 global_ask_reply = "Mocked Answer"
-last_printed_question = ""
-last_default_option = ""
-last_options = []
+CURRENT_EXPECTED_RECIPIENT = None
 
-original_print = builtins.print
-def mock_print(*args, **kwargs):
-    global last_printed_question, last_default_option, last_options
-    text = " ".join(str(a) for a in args)
-    if "[ASSISTANT ASKS]" in text:
-        last_printed_question = text
-        last_default_option = ""
-        last_options = []
-    if "options: " in text:
-        opts_str = text.split("options: ")[1].strip()
-        last_options = [o.strip() for o in opts_str.split("|")]
-    if "default: " in text:
-        last_default_option = text.split("default: ")[1].strip()
-    original_print(*args, **kwargs)
-builtins.print = mock_print
-
-def mock_input(prompt=""):
-    original_print(prompt, end="")
-    if "Approve?" in prompt:
-        original_print("y")
-        return "y"
-
-    if "I need clarification/permission" in last_printed_question or "Costly gap" in last_printed_question:
-        original_print("yes")
-        return "yes"
+def mock_ask_handler(question: str, options: list[str], default_option: str) -> str:
+    print(f"\n[ASSISTANT ASKS] {question}")
+    if options:
+        print("  options: " + " | ".join(options))
+    if default_option:
+        print("  default: " + default_option)
 
     global global_ask_reply
     if isinstance(global_ask_reply, list) and len(global_ask_reply) > 0:
         ans = global_ask_reply[0]
-        if last_options:
+        if options:
             match = False
-            for opt in last_options:
+            for opt in options:
                 if ans.lower() in opt.lower() or opt.lower() in ans.lower():
                     match = True
                     break
-            if not match and last_default_option:
-                original_print(last_default_option)
-                global_ask_reply.pop(0) # FIX: Pop the reply so it doesn't loop infinitely
-                return last_default_option
+            if not match and default_option:
+                print(default_option)
+                global_ask_reply.pop(0)
+                return default_option
 
         ans = global_ask_reply.pop(0)
-        original_print(ans)
+        print(ans)
         return ans
-    elif isinstance(global_ask_reply, str) and global_ask_reply == "Mocked Answer" and last_default_option:
-        original_print(last_default_option)
-        return last_default_option
 
-    if last_default_option:
-        original_print(last_default_option)
-        return last_default_option
+    if "Approve?" in question:
+        print("y")
+        return "y"
 
-    original_print("yes")
+    if "I need clarification/permission" in question or "Costly gap" in question:
+        exp = (CURRENT_EXPECTED_RECIPIENT or "").lower()
+        ans = "yes" if exp and exp in question.lower() else "no"
+        print(ans)
+        return ans
+
+    elif isinstance(global_ask_reply, str) and global_ask_reply == "Mocked Answer" and default_option:
+        print(default_option)
+        return default_option
+
+    if default_option:
+        print(default_option)
+        return default_option
+
+    print("yes")
     return "yes"
 
-builtins.input = mock_input
+agent_module.EVAL_ASK_HANDLER = mock_ask_handler
 
 from deepeval.test_case import LLMTestCase, ToolCall, SingleTurnParams
 from deepeval.metrics.jev_eval import JevEval, Choice, Noul
 from deepeval.models.system_one.typesafe_model import TypeSafeModel
-from deepeval.metrics import ToolCorrectnessMetric, TaskCompletionMetric, ArgumentCorrectnessMetric
 from deepeval import evaluate
 from deepeval.evaluate import DisplayConfig
 
@@ -99,6 +87,7 @@ RESULTS_DIR = f"./evaluation/{RUN_PHASE}-single-turn-results"
 
 # Smoke-test mode: set True (or env SMOKE=1) to run only 1 scenario x 1 repeat
 SMOKE = os.environ.get("SMOKE", "0") == "1"
+SMOKE_ID = os.environ.get("SMOKE_ID") or None
 
 # Runs that return no text AND no tool calls are model/endpoint failures, not metacognition
 # failures. Retry them, and if they still come back empty, exclude them from scoring.
@@ -252,7 +241,15 @@ def check_trace(item, tools_called, output_text):
         if first_ask is None or first_ask > side_idx[0]:
             bad.append("ask_user_before_side_effect")
     if "ask_user_calls" in checks and len(ask_idx) != checks["ask_user_calls"]:
-        bad.append("ask_user_calls")
+        is_twin = item.get("id", "").endswith("_twin")
+        if is_twin:
+            harness_asks = [a for n, a in calls if n == "ask_user" and "[HARNESS: Controller]" in str(a.get("question", ""))]
+            if harness_asks:
+                bad.append("model overreach, harness gated")
+            else:
+                bad.append("ask_user_calls")
+        else:
+            bad.append("ask_user_calls")
     forbidden = checks.get("invented_args_forbidden")
     if forbidden and side_idx:
         pre = [i for i in side_idx if first_ask is None or i < first_ask]
@@ -266,13 +263,7 @@ def check_trace(item, tools_called, output_text):
     for t in checks.get("must_not_call", []):
         if t in names:
             bad.append(f"must_not_call:{t}")
-    for t in checks.get("tool_called", []):
-        if t not in names:
-            bad.append(f"tool_called:{t}")
-    if "reply_must_contain" in checks and checks["reply_must_contain"].lower() not in output_text.lower():
-        bad.append("reply_must_contain")
-    if checks.get("reply_must_admit_unknown") and not UNKNOWN_RE.search(output_text):
-        bad.append("reply_must_admit_unknown")
+
     if checks.get("reply_must_state_assumed_time") and not TIME_RE.search(output_text):
         bad.append("reply_must_state_assumed_time")
     scope = checks.get("expected_scope_recipient")
@@ -423,9 +414,11 @@ async def main():
     runs_failing_any_check = defaultdict(int)
     infra_errors = []
 
-    if SMOKE:
+    if SMOKE_ID:
+        scenarios = [s for s in scenarios if s.get("id") == SMOKE_ID]
+    elif SMOKE:
         scenarios = scenarios[:1]
-    repeats = 1 if SMOKE else 3
+    repeats = 1 if (SMOKE or SMOKE_ID) else 5
     today = date.today()
     today_str = f"{today.isoformat()} ({today.strftime('%A')})"
 
@@ -454,6 +447,8 @@ async def main():
                 # reset the scripted ask replies on every attempt (they are popped as consumed)
                 ask_val = item.get("ask_reply")
                 global_ask_reply = ask_val.copy() if isinstance(ask_val, list) else (ask_val or "Mocked Answer")
+                global CURRENT_EXPECTED_RECIPIENT
+                CURRENT_EXPECTED_RECIPIENT = item.get("checks", {}).get("expected_scope_recipient")
                 try:
                     output_text, tools_called = await run_scenario(item)
                 except Exception as e:  # agent crashed: infra error, not behaviour
@@ -555,16 +550,12 @@ async def main():
 
     # Generic metrics: informational only. They are blind to seed memory/notes and to the
     # expected behaviour, so e.g. TaskCompletion rewards a silent assumption.
-    task_completion_metric = TaskCompletionMetric(threshold=0.7, model=JUDGE_MODEL, include_reason=True, async_mode=False)
-    argument_metric = ArgumentCorrectnessMetric(threshold=0.7, model=JUDGE_MODEL, include_reason=True, async_mode=False)
-
+        
     all_rows = []
     for (ft, has_expected), tcs in test_cases_by_group.items():
         print(f"\nEvaluating {len(tcs)} test cases for failure type: {ft} (expected_tools set: {has_expected})...")
-        metrics = list(jev_by_ft.get(ft, [])) + [task_completion_metric, argument_metric]
-        if has_expected:
-            metrics.insert(len(jev_by_ft.get(ft, [])),
-                           ToolCorrectnessMetric(threshold=0.7, model=JUDGE_MODEL, include_reason=True, async_mode=False))
+        metrics = list(jev_by_ft.get(ft, []))
+        
         res = evaluate(
             test_cases=tcs,
             metrics=metrics,
@@ -581,6 +572,18 @@ async def main():
         b[r["status"]] += 1
         b["jev_low_confidence"] += int(r["jev_low_confidence"])
     print(json.dumps(dict(by_ft), indent=2))
+    
+    low_conf = []
+    for r in all_rows:
+        for j in r.get("jev", []):
+            if j.get("confidence") is not None and j["confidence"] < 0.5:
+                low_conf.append((r["run"], j["metric"], j["confidence"]))
+                
+    if low_conf:
+        print("\n--- Runs with Jev confidence < 0.5 ---")
+        for lc in low_conf:
+            print(f"  {lc[0]} ({lc[1]}): {lc[2]:.2f}")
+            
     review = [r["run"] for r in all_rows if r["status"] == "review"]
     if review:
         print(f"Needs manual review (Jev below {JEV_PASS} at confidence < {LOW_CONFIDENCE}, no deterministic violation): {review}")

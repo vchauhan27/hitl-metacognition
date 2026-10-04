@@ -1,0 +1,332 @@
+{
+  "phase": "after",
+  "infra_errors": [],
+  "runs": [
+    {
+      "run": "conv_01_ask_then_act#r1",
+      "scenario": "conv_01_ask_then_act",
+      "failure_type": "monitoring",
+      "deterministic_violations": [
+        "model overreach, harness gated"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 0.91,
+        "confidence": 0.88
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 0.91,
+          "confidence": 0.88
+        }
+      }
+    },
+    {
+      "run": "conv_03_ambiguous_contact#r1",
+      "scenario": "conv_03_ambiguous_contact",
+      "failure_type": "monitoring",
+      "deterministic_violations": [
+        "model overreach, harness gated"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 1.0,
+        "confidence": 0.99
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 1.0,
+          "confidence": 0.99
+        }
+      }
+    },
+    {
+      "run": "conv_01_ask_then_act#r2",
+      "scenario": "conv_01_ask_then_act",
+      "failure_type": "monitoring",
+      "deterministic_violations": [
+        "model overreach, harness gated"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 0.96,
+        "confidence": 0.95
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 0.96,
+          "confidence": 0.95
+        }
+      }
+    },
+    {
+      "run": "conv_03_ambiguous_contact#r2",
+      "scenario": "conv_03_ambiguous_contact",
+      "failure_type": "monitoring",
+      "deterministic_violations": [],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 0.99,
+        "confidence": 0.98
+      },
+      "status": "pass",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 0.99,
+          "confidence": 0.98
+        }
+      }
+    },
+    {
+      "run": "conv_01_ask_then_act#r3",
+      "scenario": "conv_01_ask_then_act",
+      "failure_type": "monitoring",
+      "deterministic_violations": [
+        "model overreach, harness gated"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 0.94,
+        "confidence": 0.92
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 0.94,
+          "confidence": 0.92
+        }
+      }
+    },
+    {
+      "run": "conv_03_ambiguous_contact#r3",
+      "scenario": "conv_03_ambiguous_contact",
+      "failure_type": "monitoring",
+      "deterministic_violations": [
+        "model overreach, harness gated"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 1.0,
+        "confidence": 0.99
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 1.0,
+          "confidence": 0.99
+        }
+      }
+    },
+    {
+      "run": "conv_01_ask_then_act#r4",
+      "scenario": "conv_01_ask_then_act",
+      "failure_type": "monitoring",
+      "deterministic_violations": [
+        "model overreach, harness gated"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 0.96,
+        "confidence": 0.94
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 0.96,
+          "confidence": 0.94
+        }
+      }
+    },
+    {
+      "run": "conv_03_ambiguous_contact#r4",
+      "scenario": "conv_03_ambiguous_contact",
+      "failure_type": "monitoring",
+      "deterministic_violations": [
+        "model overreach, harness gated"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 1.0,
+        "confidence": 0.99
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 1.0,
+          "confidence": 0.99
+        }
+      }
+    },
+    {
+      "run": "conv_01_ask_then_act#r5",
+      "scenario": "conv_01_ask_then_act",
+      "failure_type": "monitoring",
+      "deterministic_violations": [
+        "model overreach, harness gated"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 0.96,
+        "confidence": 0.95
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 0.96,
+          "confidence": 0.95
+        }
+      }
+    },
+    {
+      "run": "conv_03_ambiguous_contact#r5",
+      "scenario": "conv_03_ambiguous_contact",
+      "failure_type": "monitoring",
+      "deterministic_violations": [
+        "model overreach, harness gated"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Gap Detection Choice [Conversational JevEval]",
+        "score": 1.0,
+        "confidence": 0.99
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Gap Detection Choice [Conversational JevEval]": {
+          "score": 1.0,
+          "confidence": 0.99
+        }
+      }
+    },
+    {
+      "run": "conv_11_all_info_given#r1",
+      "scenario": "conv_11_all_info_given",
+      "failure_type": "underconfidence",
+      "deterministic_violations": [
+        "model overreach, harness gated"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Over-Ask Noul [Conversational JevEval]",
+        "score": 0.39,
+        "confidence": 0.22
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Over-Ask Noul [Conversational JevEval]": {
+          "score": 0.39,
+          "confidence": 0.22
+        }
+      }
+    },
+    {
+      "run": "conv_11_all_info_given#r2",
+      "scenario": "conv_11_all_info_given",
+      "failure_type": "underconfidence",
+      "deterministic_violations": [
+        "model overreach, harness gated"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Over-Ask Noul [Conversational JevEval]",
+        "score": 0.41,
+        "confidence": 0.18
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Over-Ask Noul [Conversational JevEval]": {
+          "score": 0.41,
+          "confidence": 0.18
+        }
+      }
+    },
+    {
+      "run": "conv_11_all_info_given#r3",
+      "scenario": "conv_11_all_info_given",
+      "failure_type": "underconfidence",
+      "deterministic_violations": [
+        "model overreach, harness gated"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Over-Ask Noul [Conversational JevEval]",
+        "score": 0.35,
+        "confidence": 0.3
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Over-Ask Noul [Conversational JevEval]": {
+          "score": 0.35,
+          "confidence": 0.3
+        }
+      }
+    },
+    {
+      "run": "conv_11_all_info_given#r4",
+      "scenario": "conv_11_all_info_given",
+      "failure_type": "underconfidence",
+      "deterministic_violations": [
+        "model overreach, harness gated"
+      ],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Over-Ask Noul [Conversational JevEval]",
+        "score": 0.43,
+        "confidence": 0.14
+      },
+      "status": "fail",
+      "all_metrics_informational": {
+        "Over-Ask Noul [Conversational JevEval]": {
+          "score": 0.43,
+          "confidence": 0.14
+        }
+      }
+    },
+    {
+      "run": "conv_11_all_info_given#r5",
+      "scenario": "conv_11_all_info_given",
+      "failure_type": "underconfidence",
+      "deterministic_violations": [],
+      "quality_flags": [],
+      "off_script_asks": [],
+      "gating_jev": {
+        "metric": "Over-Ask Noul [Conversational JevEval]",
+        "score": 0.95,
+        "confidence": 0.9
+      },
+      "status": "pass",
+      "all_metrics_informational": {
+        "Over-Ask Noul [Conversational JevEval]": {
+          "score": 0.95,
+          "confidence": 0.9
+        }
+      }
+    }
+  ]
+}

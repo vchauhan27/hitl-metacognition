@@ -19,12 +19,19 @@ class StandingPermissionChecker:
         for m in recall_fn() or []:
             val = str((m.get("value") or {}).get("value", "")).lower()
             if (
-                tool_name.lower() in val
+                self._mentions_tool(tool_name, val)
                 and any(a in val for a in aliases)
                 and not self._is_expired(val)
             ):
                 return True
         return False
+
+    @staticmethod
+    def _mentions_tool(tool_name: str, value: str) -> bool:
+        """Match the tool by its id ('send_message') or natural language ('send message(s)')."""
+        t = tool_name.lower()
+        words = t.replace("_", " ")  # 'send message'
+        return t in value or words in value or (words + "s") in value
 
     @staticmethod
     def _is_expired(value: str) -> bool:

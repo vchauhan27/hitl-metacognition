@@ -1,3 +1,96 @@
+# ==========================================
+# harness/core.py (Merged Wrapper & Controller)
+# ==========================================
+"""Shared signal type emitted by every failure module and consumed by the Controller."""
+
+
+class MonitorSignal:
+    def __init__(self, gap_type: str, severity: str, message: str, requires_ask: bool = False,
+                 failure_type: str = "", options: list | None = None):
+        self.gap_type = gap_type
+        self.severity = severity  # 'low', 'medium', 'high'
+        self.message = message
+        self.requires_ask = requires_ask
+        # Which human failure type this signal is a fix for (monitoring / control / ...)
+        self.failure_type = failure_type
+        # Optional concrete choices to offer the user when the Controller routes to "ask"
+        self.options = options or []
+
+    def __repr__(self):
+        return (f"MonitorSignal({self.failure_type}:{self.gap_type}, {self.severity}, "
+                f"requires_ask={self.requires_ask})")
+
+
+import logging
+from typing import List
+
+log = logging.getLogger("controller")
+
+# Global event list for evaluation scripts to read from
+INTERVENTION_EVENTS = []
+
+class ControllerAction:
+    def __init__(self, action: str, reason: str, signals: List[MonitorSignal]):
+        # Valid actions: 'proceed', 'proceed_and_disclose', 'ask'
+        self.action = action
+        self.reason = reason
+        self.signals = signals
+
+    def __repr__(self):
+        return f"ControllerAction(action='{self.action}', reason='{self.reason}')"
+
+
+class Controller:
+    """
+    The fixed policy that maps Monitor signals to deterministic actions.
+    This entirely removes the burden of metacognition from the LLM.
+    """
+    
+    def __init__(self):
+        # We define which gaps are considered "small gaps" (cheap to undo).
+        # For example, adding a reminder with no specific time might be cheap to undo,
+        # but booking a flight is costly. 
+        self.small_gaps = ["minor_missing_slot", "cheap_assumption"]
+
+    def decide(self, signals: List[MonitorSignal]) -> ControllerAction:
+        """
+        Evaluate the signals and return the safest bounded action.
+        Precedence: ask > proceed_and_disclose > proceed
+        """
+        if not signals:
+            return ControllerAction("proceed", "No gaps detected. High confidence.", [])
+            
+        # Priority 1: Knowledge gaps -> Ask human for missing info
+        for sig in signals:
+            if sig.gap_type == "knowledge_gap":
+                return ControllerAction(
+                    "ask", 
+                    "Agent attempting to hallucinate facts without RAG support. Seeking human help.", 
+                    signals
+                )
+                
+        # Priority 2: High severity gaps or strict permissions -> Ask
+        for sig in signals:
+            if sig.severity in ["high", "medium"] or sig.requires_ask:
+                return ControllerAction(
+                    "ask", 
+                    f"Costly gap or permission rule fired: {sig.message}", 
+                    signals
+                )
+                
+        # Priority 3: Small gaps, cheap to undo -> Proceed and disclose
+        for sig in signals:
+            if sig.gap_type in self.small_gaps or sig.severity == "low":
+                return ControllerAction(
+                    "proceed_and_disclose", 
+                    f"Small gap detected, proceeding with disclosure: {sig.message}", 
+                    signals
+                )
+                
+        # Fallback safe default
+        return ControllerAction("ask", "Unhandled gap type, defaulting to safe ask.", signals)
+
+
 """
 HarnessModelWrapper — couples the failure modules to the LangGraph agent.
 
@@ -16,10 +109,9 @@ attach a disclosure. Implements the plan's harness fixes:
 import re
 from typing import Any
 
-from harness.controller import Controller
 from harness.failures.control import PermissionGate
 from harness.failures.monitoring import MonitoringChecks, JevAssumptionSensor
-from harness.failures.signals import MonitorSignal
+from harness.failures.executive_asking import AskLinter
 
 # Marker embedded in harness permission asks. The eval mocks key off this phrase.
 PERMISSION_PREFIX = "I need clarification/permission"
@@ -56,6 +148,7 @@ class HarnessModelWrapper:
         self.monitoring = MonitoringChecks()
         self.jev = JevAssumptionSensor(threshold=0.75)
         self.controller = Controller()
+        self.ask_linter = AskLinter()
 
     def _clone(self, model):
         return HarnessModelWrapper(model, store=self.store, contacts=self.contacts, user_id=self.default_user_id)
@@ -145,14 +238,16 @@ class HarnessModelWrapper:
         turn = messages[last_human + 1:]
 
         user_inputs, grounding = [], []
-        for m in messages:
+        if last_human != -1:
+            user_inputs.append(_text(getattr(messages[last_human], "content", "")))
+            
+        for i, m in enumerate(messages):
             t = _mtype(m)
             if t == "human":
-                user_inputs.append(_text(getattr(m, "content", "")))
-                grounding.append(user_inputs[-1])
+                grounding.append(_text(getattr(m, "content", "")))
             elif t == "tool" and getattr(m, "name", None) in GROUNDING_TOOLS:
                 grounding.append(_text(m.content))
-                if m.name == "ask_user":
+                if m.name == "ask_user" and i > last_human:
                     user_inputs.append(_text(m.content))
         combined_user_input = "\n".join(user_inputs)
         user_text_lower = combined_user_input.lower()
@@ -194,6 +289,16 @@ class HarnessModelWrapper:
                     if tcall["name"] in SIDE_EFFECT_TOOLS:
                         executed_side_effects.add((tcall["name"], str(tcall.get("args", {}))))
 
+        # Catch and reject conversational questions
+        has_ask_tool = any(tc["name"] == "ask_user" for tc in tool_calls)
+        if not has_ask_tool and forced_content and "?" in forced_content:
+            return {
+                "linter_rejected": True,
+                "tool_call": None,
+                "feedback": "Ask rejected: You asked a question using conversational text. You MUST use the `ask_user` tool to ask questions so the UI can render structured options.",
+                "ai_message": ai_message
+            }
+
         for tc in tool_calls:
             name, args = tc["name"], dict(tc.get("args") or {})
             
@@ -204,6 +309,13 @@ class HarnessModelWrapper:
                 continue
 
             if name not in SIDE_EFFECT_TOOLS:
+                if name == "ask_user":
+                    q = str(args.get("question", ""))
+                    opts = args.get("options", [])
+                    d_opt = str(args.get("default_option", ""))
+                    fb = self.ask_linter.lint(q, opts, d_opt)
+                    if not fb.is_valid:
+                        return {"linter_rejected": True, "tool_call": tc, "feedback": fb.feedback, "ai_message": ai_message}
                 new_tool_calls.append(tc)
                 continue
 
@@ -240,6 +352,13 @@ class HarnessModelWrapper:
             if action.action == "proceed":
                 new_tool_calls.append(tc)
                 continue
+            
+            INTERVENTION_EVENTS.append({
+                "action": action.action,
+                "tool": name,
+                "signals": [s.__dict__ for s in signals]
+            })
+            
             print(f"[HARNESS: Controller] Overriding agent to: {action.action.upper()}")
 
 
@@ -288,9 +407,56 @@ class HarnessModelWrapper:
 
     # ------------------------------------------------------------------ invoke
     def invoke(self, input_data, config=None, **kwargs) -> Any:
-        res = self.model.invoke(input_data, config=config, **kwargs)
-        return self._apply_harness(input_data, res)
+        # Clone input_data so we can mutate the messages list during retries
+        messages = input_data.get("messages", []) if isinstance(input_data, dict) else list(input_data or [])
+        messages = list(messages)
+        harness_result = None
+        
+        for _ in range(3):
+            data_to_pass = {**input_data, "messages": messages} if isinstance(input_data, dict) else messages
+            res = self.model.invoke(data_to_pass, config=config, **kwargs)
+            harness_result = self._apply_harness(data_to_pass, res)
+            
+            if isinstance(harness_result, dict) and harness_result.get("linter_rejected"):
+                from langchain_core.messages import ToolMessage, HumanMessage
+                messages.append(harness_result["ai_message"])
+                tc = harness_result.get("tool_call")
+                if tc:
+                    messages.append(ToolMessage(
+                        tool_call_id=tc["id"],
+                        name=tc["name"],
+                        content=harness_result["feedback"]
+                    ))
+                else:
+                    messages.append(HumanMessage(content=f"[SYSTEM NOTIFICATION]: {harness_result['feedback']}"))
+                continue
+            return harness_result
+            
+        return harness_result
 
     async def ainvoke(self, input_data, config=None, **kwargs) -> Any:
-        res = await self.model.ainvoke(input_data, config=config, **kwargs)
-        return self._apply_harness(input_data, res)
+        messages = input_data.get("messages", []) if isinstance(input_data, dict) else list(input_data or [])
+        messages = list(messages)
+        harness_result = None
+        
+        for _ in range(3):
+            data_to_pass = {**input_data, "messages": messages} if isinstance(input_data, dict) else messages
+            res = await self.model.ainvoke(data_to_pass, config=config, **kwargs)
+            harness_result = self._apply_harness(data_to_pass, res)
+            
+            if isinstance(harness_result, dict) and harness_result.get("linter_rejected"):
+                from langchain_core.messages import ToolMessage, HumanMessage
+                messages.append(harness_result["ai_message"])
+                tc = harness_result.get("tool_call")
+                if tc:
+                    messages.append(ToolMessage(
+                        tool_call_id=tc["id"],
+                        name=tc["name"],
+                        content=harness_result["feedback"]
+                    ))
+                else:
+                    messages.append(HumanMessage(content=f"[SYSTEM NOTIFICATION]: {harness_result['feedback']}"))
+                continue
+            return harness_result
+            
+        return harness_result

@@ -5,30 +5,23 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from langchain.agents import create_agent
-from langchain.tools import ToolRuntime, tool
+from langchain.tools import tool
 from langchain_chroma import Chroma
 from langgraph.checkpoint.memory import MemorySaver
-from langchain_core.messages import HumanMessage, AIMessage, RemoveMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.store.memory import InMemoryStore
 from dataclasses import dataclass
 
-from config import get_llm, get_embeddings, CHROMA_COLLECTION, CHROMA_DIR, HARNESS_ENABLED
+from config import get_llm, get_embeddings, CHROMA_COLLECTION, CHROMA_DIR
 
-from harness.wrapper import HarnessModelWrapper, PERMISSION_PREFIX
+from harness.core import HarnessModelWrapper, PERMISSION_PREFIX
 from harness.failures.executive_asking import AskLinter
 
-# ---------------------------------------------------------
-# Environment
-# ---------------------------------------------------------
 
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
 
-# ---------------------------------------------------------
-# Fake Data
-# ---------------------------------------------------------
 
 CONTACTS = {
     "Sam Carter": "sam.carter@example.com (engineering)",
@@ -45,19 +38,14 @@ def _now() -> str:
 class Context:
     user_id: str
 
-# ---------------------------------------------------------
-# 1. Models & Vector DB
-# ---------------------------------------------------------
 
 model_base = get_llm()
 
 # long memory — created before the model so it can be injected into the harness
 store = InMemoryStore()
 
-# Harness ("after" run): wraps the model, couples failures/* modules to every tool call.
-# HARNESS=0 reproduces the prompt-only "before" baseline.
-model = HarnessModelWrapper(model_base, store=store, contacts=CONTACTS) if HARNESS_ENABLED else model_base
-print(f"[HARNESS] {'ENABLED' if HARNESS_ENABLED else 'DISABLED'}")
+# Harness wraps the model, couples failures/* modules to every tool call.
+model = HarnessModelWrapper(model_base, store=store, contacts=CONTACTS)
 
 embeddings = get_embeddings()
 
@@ -68,13 +56,6 @@ vectorstore = Chroma(
 )
 
 checkpointer = MemorySaver()
-
-# ---------------------------------------------------------
-# 2. Tools
-# ---------------------------------------------------------
-
-
-
 
 
 @tool
@@ -99,8 +80,9 @@ def send_message(to: str, body: str) -> str:
 
 
 
-linter = AskLinter() if HARNESS_ENABLED else None
-EVAL_ASK_HANDLER = None
+from typing import Callable, Optional
+linter = AskLinter()
+EVAL_ASK_HANDLER: Optional[Callable] = None
 
 @tool
 def ask_user(question: str, options: list[str], default_option: str) -> str:
@@ -130,9 +112,6 @@ def ask_user(question: str, options: list[str], default_option: str) -> str:
         return default_option
     return ans
 
-# ---------------------------------------------------------
-# 3. Agent
-# ---------------------------------------------------------
 
 SYSTEM_PROMPT = (
     "You are a professional personal assistant. Today is {today} ({weekday}).\n\n"
@@ -151,7 +130,7 @@ SYSTEM_PROMPT = (
     weekday=date.today().strftime("%A")
 )
 
-agent = create_agent(
+agent = create_agent( # type: ignore
     model=model,  # type: ignore
     tools=[
         create_event,
@@ -165,9 +144,7 @@ agent = create_agent(
     context_schema=Context,
 )
 
-# ---------------------------------------------------------
-# 4. Run agent
-# ---------------------------------------------------------
+
 
 def main():
     print("=" * 70)
@@ -233,4 +210,4 @@ def main():
             print(repr(e))
 
 if __name__ == "__main__":
-    main() 
+    main()

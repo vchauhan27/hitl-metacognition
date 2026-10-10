@@ -13,3 +13,10 @@ wheels/
 .env
 chroma_db/
 session_memory.sqlite
+notes/
+.deepeval/
+
+# IDE and OS files
+.vscode/
+.DS_Store
+Thumbs.db

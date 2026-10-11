@@ -78,6 +78,9 @@ def send_message(to: str, body: str) -> str:
     SENT.append({"to": to, "body": body})
     return f"Message sent to {to}."
 
+# NOTE: `recall` is defined here for Phase 2 long-term memory retrieval experiments.
+# It is intentionally kept unregistered from the baseline toolset below to preserve
+# deterministic scenario reply queue alignment in the PoC evaluation suite.
 @tool
 def recall(query: str = "") -> str:
     """Read the user's saved long-term memory (roles like 'my manager', preferences, standing permissions).

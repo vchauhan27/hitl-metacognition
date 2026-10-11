@@ -6,7 +6,7 @@ tuples, never as bare tool names, so "yes for Priya" can never cover Sam (Plan P
 """
 from typing import Callable, Optional
 
-from harness.core import MonitorSignal
+from harness.signals import MonitorSignal
 from harness.failures.underconfidence import StandingPermissionChecker
 
 # Tools that leave the system and cannot be easily undone

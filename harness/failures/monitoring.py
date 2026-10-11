@@ -10,7 +10,7 @@ import re
 from typing import Optional
 
 from config import get_jev_model_name, MEMORY_AGE_LIMIT_DAYS
-from harness.core import MonitorSignal
+from harness.signals import MonitorSignal
 
 log = logging.getLogger("monitoring")
 JEV_URL = "https://openrouter.ai/api/alpha/decisions"
@@ -194,14 +194,19 @@ class JevAssumptionSensor:
                     message=f"I assumed a time of day you did not specify. Tell me if you want it changed.",
                     requires_ask=False, failure_type="monitoring"
                 )
-            return None
+            # Tier 1 (Deterministic syntax checks) passed with no violations.
+            # Fall through to Tier 2 (Jev semantic verification).
 
         if not self.api_key:
             return None
 
-        # Composing the message body from the user's gist is expected, not an assumption.
-        # Only the recipient can be "invented" for send_message.
-        if tool_name == "send_message":
+        # Tier 2: Semantic check via Jev
+        # Exclude non-assumptive content:
+        # - For create_event: exclude title/name/description (composing title from user gist is normal)
+        # - For send_message: exclude body/message/text (only recipient can be an ungrounded assumption)
+        if tool_name == "create_event":
+            tool_args = {k: v for k, v in tool_args.items() if k not in ("title", "name", "description")}
+        elif tool_name == "send_message":
             tool_args = {k: v for k, v in tool_args.items() if k not in ("body", "message", "text")}
             recipient = str(tool_args.get("to", "")).lower()
             grounded = f"{user_input}\n{retrieval_context}".lower()

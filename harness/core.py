@@ -3,22 +3,8 @@
 # ==========================================
 """Shared signal type emitted by every failure module and consumed by the Controller."""
 
+from harness.signals import MonitorSignal  # Re-exported for backwards compatibility
 
-class MonitorSignal:
-    def __init__(self, gap_type: str, severity: str, message: str, requires_ask: bool = False,
-                 failure_type: str = "", options: list | None = None):
-        self.gap_type = gap_type
-        self.severity = severity  # 'low', 'medium', 'high'
-        self.message = message
-        self.requires_ask = requires_ask
-        # Which human failure type this signal is a fix for (monitoring / control / ...)
-        self.failure_type = failure_type
-        # Optional concrete choices to offer the user when the Controller routes to "ask"
-        self.options = options or []
-
-    def __repr__(self):
-        return (f"MonitorSignal({self.failure_type}:{self.gap_type}, {self.severity}, "
-                f"requires_ask={self.requires_ask})")
 
 
 import logging
@@ -383,6 +369,13 @@ class HarnessModelWrapper:
                 if sig:
                     signals.append(sig)
 
+            is_unrequested = False
+            if name == "send_message":
+                msg_intent_words = ("message", "tell", "email", "text", "notify", "send", "ping", "reminder to", "note to", "ask him", "ask her")
+                if not any(w in user_text_lower for w in msg_intent_words):
+                    is_unrequested = True
+                    print(f"\n[HARNESS: Control] Detected unrequested side-effect: '{name}' to '{scope[1]}'.")
+
             for s in signals:
                 print(f"\n[HARNESS: {s.failure_type or 'monitor'}] {s.message}")
 
@@ -394,7 +387,8 @@ class HarnessModelWrapper:
             INTERVENTION_EVENTS.append({
                 "action": action.action,
                 "tool": name,
-                "signals": [s.__dict__ for s in signals]
+                "signals": [s.__dict__ for s in signals],
+                "unrequested_side_effect": is_unrequested,
             })
             
             print(f"[HARNESS: Controller] Overriding agent to: {action.action.upper()}")

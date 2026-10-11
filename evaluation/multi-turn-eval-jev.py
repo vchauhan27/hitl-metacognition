@@ -492,6 +492,7 @@ def score_with_jev(scenario: dict, full_turns: list[dict], all_tools: list[dict]
     # Detect if the harness had to intervene to save the agent
     from harness.core import INTERVENTION_EVENTS
     harness_intervened = len(INTERVENTION_EVENTS) > 0
+    unrequested_caught = sum(1 for e in INTERVENTION_EVENTS if e.get("unrequested_side_effect"))
 
     # ── JEV-based pass/fail + deterministic overrides ────────────────────────────
     # asked_first_prob is now always P(correct behaviour): low value = wrong for ALL scenario types.
@@ -534,6 +535,7 @@ def score_with_jev(scenario: dict, full_turns: list[dict], all_tools: list[dict]
         },
         "pattern_applicable": pattern_applicable,
         "harness_intervened": harness_intervened,
+        "unrequested_side_effects_caught": unrequested_caught,
         # Baseline = system verdict (incl. deterministic overrides) with no harness help.
         "agent_baseline_passed": (not harness_intervened) and system_passed,
         "system_final_score": round(final_score, 3),
@@ -614,9 +616,11 @@ async def main():
     total = len(results)
     system_passed = sum(1 for r in results if r.get("system_passed"))
     agent_passed = sum(1 for r in results if r.get("agent_baseline_passed"))
+    total_unrequested = sum(r.get("unrequested_side_effects_caught", 0) for r in results)
     print(f"  Scenarios              : {total}")
     print(f"  Agent Baseline Passed  : {agent_passed}/{total}  ({100*agent_passed//total if total else 0}%)")
     print(f"  System w/ Harness Pass : {system_passed}/{total}  ({100*system_passed//total if total else 0}%)")
+    print(f"  Unrequested Side-Effects Caught: {total_unrequested}")
 
     # Group by failure type
     by_type_system: dict[str, list] = {}

@@ -199,6 +199,15 @@ class JevAssumptionSensor:
         if not self.api_key:
             return None
 
+        # Composing the message body from the user's gist is expected, not an assumption.
+        # Only the recipient can be "invented" for send_message.
+        if tool_name == "send_message":
+            tool_args = {k: v for k, v in tool_args.items() if k not in ("body", "message", "text")}
+            recipient = str(tool_args.get("to", "")).lower()
+            grounded = f"{user_input}\n{retrieval_context}".lower()
+            if recipient and recipient in grounded:
+                return None  # recipient came from the user or a contact lookup
+
         today = datetime.date.today()
         payload = {
             "model": self.model,
@@ -248,9 +257,10 @@ class JevAssumptionSensor:
                     requires_ask=True, failure_type="monitoring"
                 )
                 
+            fields = ", ".join(tool_args.keys()) or "some details"
             return MonitorSignal(
                 gap_type="minor_missing_slot", severity="low",
-                message=f"I assumed some details you did not specify ({tool_args}). Tell me if you want them changed.",
+                message=f"I assumed some details you did not specify ({fields}). Tell me if you want them changed.",
                 requires_ask=False, failure_type="monitoring"
             )
             

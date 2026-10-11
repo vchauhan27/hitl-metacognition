@@ -78,6 +78,29 @@ def send_message(to: str, body: str) -> str:
     SENT.append({"to": to, "body": body})
     return f"Message sent to {to}."
 
+@tool
+def recall(query: str = "") -> str:
+    """Read the user's saved long-term memory (roles like 'my manager', preferences, standing permissions).
+    Call this BEFORE asking the user who someone is or before contact lookups fail on a role description.
+    """
+    try:
+        from langgraph.runtime import get_runtime
+        user_id = getattr(get_runtime().context, "user_id", None)
+    except Exception:
+        user_id = None
+    if not user_id:
+        return "No memory available."
+    items = store.search(("memories", user_id), limit=50)
+    lines = []
+    for i in items:
+        val = i.value or {}
+        text = str(val.get("value", val)) if isinstance(val, dict) else str(val)
+        if not query or any(w in f"{i.key} {text}".lower() for w in query.lower().split()):
+            lines.append(f"{i.key}: {text}")
+    if query and not lines:  # fall back to everything rather than hide a relevant fact
+        lines = [f"{i.key}: {(i.value or {}).get('value', i.value)}" for i in items]
+    return "\n".join(lines) or "No saved memories."
+
 
 
 from typing import Callable, Optional
@@ -115,16 +138,11 @@ def ask_user(question: str, options: list[str], default_option: str) -> str:
 
 SYSTEM_PROMPT = (
     "You are a professional personal assistant. Today is {today} ({weekday}).\n\n"
-    "Core principles:\n"
-    "- Ask before acting ONLY when a detail is missing. If all information is provided, DO NOT ask for permission, just execute the tool.\n"
-    "- Never guess. If a name, time, or contact is not explicitly provided, use your tools to look it up or ask.\n"
-    "- Do not send messages or notifications unless explicitly requested by the user.\n"
-    "- Resolve names via tools. Use `lookup_contact` for people.\n"
-    "- Resolve dates precisely. Calculate the ISO date silently based on today's date. Do not ask the user to confirm relative dates (e.g., 'tomorrow').\n"
-    "- Scope permissions narrowly. A user approval for one action does not cover other actions or recipients.\n"
-    "- Act once. If a tool has already succeeded, do not repeat that step.\n"
-    "- Confirm only facts. Only state what was confirmed by a tool result — do not infer or embellish.\n"
-    "- Be concise in all replies."
+    "Help the user manage their calendar, contacts and messages using the available tools.\n"
+    "- Use `lookup_contact` to resolve people before acting on them.\n"
+    "- If something important is unclear, ask the user with `ask_user`; otherwise go ahead and complete the task.\n"
+    "- Don't make things up — base your answers on tool results.\n"
+    "- Be concise and helpful."
 ).format(
     today=date.today().isoformat(),
     weekday=date.today().strftime("%A")

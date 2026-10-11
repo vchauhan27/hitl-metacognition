@@ -70,7 +70,7 @@ def get_llm():
     # )
 
     return ChatOpenAI(
-        model="meta-llama/llama-3.3-70b-instruct",
+        model="xiaomi/mimo-v2.6-flash",
         api_key=os.environ.get("OPENROUTER_API_KEY"),  # type: ignore
         base_url="https://openrouter.ai/api/v1",
         temperature=0.0,

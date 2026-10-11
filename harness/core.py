@@ -230,12 +230,39 @@ class HarnessModelWrapper:
     def _apply_harness(self, input_data, ai_message):
         messages = input_data.get("messages", []) if isinstance(input_data, dict) else list(input_data or [])
         tool_calls = list(getattr(ai_message, "tool_calls", None) or [])
-        if not tool_calls:
-            return self._carry_disclosure(messages, ai_message)
 
         # Current turn = everything after the last human message (approvals never cross turns).
         last_human = max((i for i, m in enumerate(messages) if _mtype(m) == "human"), default=-1)
         turn = messages[last_human + 1:]
+
+        # Anti-loop check: track previously executed side-effect tools in this turn
+        executed_side_effects = set()
+        for m in turn:
+            if _mtype(m) == "ai":
+                for tcall in getattr(m, "tool_calls", None) or []:
+                    if tcall["name"] in SIDE_EFFECT_TOOLS:
+                        executed_side_effects.add((tcall["name"], str(tcall.get("args", {}))))
+
+        forced_content = _text(ai_message.content)
+
+        # Catch and reject conversational questions:
+        # If no side-effect has executed yet, and the agent asks a question via conversational text without ask_user,
+        # reject and require the agent to use the ask_user tool so the UI can render structured options.
+        has_ask_tool = any(tc["name"] == "ask_user" for tc in tool_calls)
+        is_conversational_ask = bool(forced_content) and (
+            "?" in forced_content or
+            bool(re.search(r"\b(could you|can you|please provide|please specify|please tell|let me know|who is|what is|when would|which)\b", forced_content, re.IGNORECASE))
+        )
+        if not executed_side_effects and not has_ask_tool and is_conversational_ask:
+            return {
+                "linter_rejected": True,
+                "tool_call": None,
+                "feedback": "Ask rejected: You asked a question using conversational text. You MUST use the `ask_user` tool to ask questions so the UI can render structured options.",
+                "ai_message": ai_message
+            }
+
+        if not tool_calls:
+            return self._carry_disclosure(messages, ai_message)
 
         user_inputs, grounding = [], []
         if last_human != -1:
@@ -278,26 +305,7 @@ class HarnessModelWrapper:
                 break
 
         recall_fn = self._recall_fn()
-        forced_content = _text(ai_message.content)
         new_tool_calls = []
-
-        # Anti-loop check: track previously executed side-effect tools in this turn
-        executed_side_effects = set()
-        for m in turn:
-            if _mtype(m) == "ai":
-                for tcall in getattr(m, "tool_calls", None) or []:
-                    if tcall["name"] in SIDE_EFFECT_TOOLS:
-                        executed_side_effects.add((tcall["name"], str(tcall.get("args", {}))))
-
-        # Catch and reject conversational questions
-        has_ask_tool = any(tc["name"] == "ask_user" for tc in tool_calls)
-        if not has_ask_tool and forced_content and "?" in forced_content:
-            return {
-                "linter_rejected": True,
-                "tool_call": None,
-                "feedback": "Ask rejected: You asked a question using conversational text. You MUST use the `ask_user` tool to ask questions so the UI can render structured options.",
-                "ai_message": ai_message
-            }
 
         for tc in tool_calls:
             name, args = tc["name"], dict(tc.get("args") or {})
@@ -313,6 +321,36 @@ class HarnessModelWrapper:
                     q = str(args.get("question", ""))
                     opts = args.get("options", [])
                     d_opt = str(args.get("default_option", ""))
+
+                    # Executive Asking guard: intercept unnecessary asking for cheap-to-undo personal calendar events
+                    clean_input = re.sub(r"(?<!\w)'[^']*'(?!\w)|\"[^\"]*\"", " ", combined_user_input or "").lower()
+                    day_pattern = re.compile(
+                        r"\b(today|tomorrow|tonight|"
+                        r"mon(day)?|tue(s|sday)?|wed(nesday)?|thu(r|rs|rsday)?|fri(day)?|sat(urday)?|sun(day)?)\b",
+                        re.IGNORECASE,
+                    )
+                    has_day = bool(day_pattern.search(clean_input))
+                    is_time_ask = bool(re.search(
+                        r"\b(what time|time of day|which time|at what time|what start time|preferred time)\b", q, re.IGNORECASE))
+                    # Involves another person? (full name, first name, or "with/to <someone>") -> not a cheap personal task.
+                    first_names = {c.split()[0].lower() for c in self.contacts}
+                    contacts_mentioned = (
+                        any(c.lower() in clean_input for c in self.contacts)
+                        or any(re.search(rf"\b{re.escape(f)}\b", clean_input) for f in first_names)
+                        or bool(re.search(r"\b(with|meeting|call|sync|lunch|dinner|invite)\b", clean_input))
+                    )
+
+                    if has_day and is_time_ask and not contacts_mentioned:
+                        return {
+                            "linter_rejected": True,
+                            "tool_call": tc,
+                            "feedback": (
+                                "Ask rejected: Adding a personal event/task when the day is already specified is cheap to undo. "
+                                "Do NOT ask the user for a time. Proceed directly by calling `create_event` with a default time (e.g. '09:00')."
+                            ),
+                            "ai_message": ai_message
+                        }
+
                     fb = self.ask_linter.lint(q, opts, d_opt)
                     if not fb.is_valid:
                         return {"linter_rejected": True, "tool_call": tc, "feedback": fb.feedback, "ai_message": ai_message}
@@ -406,57 +444,61 @@ class HarnessModelWrapper:
         return ai_message
 
     # ------------------------------------------------------------------ invoke
+    MAX_RETRIES = 3
+
+    def _handle_rejection(self, messages: list, harness_result: dict) -> None:
+        """Feed linter feedback back to the model and record it as a harness intervention."""
+        from langchain_core.messages import ToolMessage, HumanMessage
+        print(f"\n[HARNESS: Linter] {harness_result['feedback']}")
+        INTERVENTION_EVENTS.append({
+            "action": "linter_reject",
+            "tool": (harness_result.get("tool_call") or {}).get("name", "text"),
+            "signals": [{"message": harness_result["feedback"]}],
+        })
+        messages.append(harness_result["ai_message"])
+        tc = harness_result.get("tool_call")
+        if tc:
+            messages.append(ToolMessage(tool_call_id=tc["id"], name=tc["name"], content=harness_result["feedback"]))
+        else:
+            messages.append(HumanMessage(content=f"[SYSTEM NOTIFICATION]: {harness_result['feedback']}"))
+
+    @staticmethod
+    def _fallback(harness_result):
+        """Retries exhausted: never return the internal dict to LangGraph — return the model's last message."""
+        if isinstance(harness_result, dict):
+            print("\n[HARNESS] Retries exhausted; passing the agent's last message through.")
+            return harness_result["ai_message"]
+        return harness_result
+
     def invoke(self, input_data, config=None, **kwargs) -> Any:
         # Clone input_data so we can mutate the messages list during retries
         messages = input_data.get("messages", []) if isinstance(input_data, dict) else list(input_data or [])
         messages = list(messages)
         harness_result = None
-        
-        for _ in range(3):
+
+        for _ in range(self.MAX_RETRIES):
             data_to_pass = {**input_data, "messages": messages} if isinstance(input_data, dict) else messages
             res = self.model.invoke(data_to_pass, config=config, **kwargs)
             harness_result = self._apply_harness(data_to_pass, res)
-            
             if isinstance(harness_result, dict) and harness_result.get("linter_rejected"):
-                from langchain_core.messages import ToolMessage, HumanMessage
-                messages.append(harness_result["ai_message"])
-                tc = harness_result.get("tool_call")
-                if tc:
-                    messages.append(ToolMessage(
-                        tool_call_id=tc["id"],
-                        name=tc["name"],
-                        content=harness_result["feedback"]
-                    ))
-                else:
-                    messages.append(HumanMessage(content=f"[SYSTEM NOTIFICATION]: {harness_result['feedback']}"))
+                self._handle_rejection(messages, harness_result)
                 continue
             return harness_result
-            
-        return harness_result
+
+        return self._fallback(harness_result)
 
     async def ainvoke(self, input_data, config=None, **kwargs) -> Any:
         messages = input_data.get("messages", []) if isinstance(input_data, dict) else list(input_data or [])
         messages = list(messages)
         harness_result = None
-        
-        for _ in range(3):
+
+        for _ in range(self.MAX_RETRIES):
             data_to_pass = {**input_data, "messages": messages} if isinstance(input_data, dict) else messages
             res = await self.model.ainvoke(data_to_pass, config=config, **kwargs)
             harness_result = self._apply_harness(data_to_pass, res)
-            
             if isinstance(harness_result, dict) and harness_result.get("linter_rejected"):
-                from langchain_core.messages import ToolMessage, HumanMessage
-                messages.append(harness_result["ai_message"])
-                tc = harness_result.get("tool_call")
-                if tc:
-                    messages.append(ToolMessage(
-                        tool_call_id=tc["id"],
-                        name=tc["name"],
-                        content=harness_result["feedback"]
-                    ))
-                else:
-                    messages.append(HumanMessage(content=f"[SYSTEM NOTIFICATION]: {harness_result['feedback']}"))
+                self._handle_rejection(messages, harness_result)
                 continue
             return harness_result
-            
-        return harness_result
+
+        return self._fallback(harness_result)

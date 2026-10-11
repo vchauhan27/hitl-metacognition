@@ -138,6 +138,56 @@
             }
         },
         {
+            "id": "under_06",
+            "failure_type": "underconfidence",
+            "gap_type": "fully_specified",
+            "expected_action": "proceed",
+            "user_messages": [
+                "Book a sync with Priya on the 16th at 2pm"
+            ],
+            "ask_reply": null,
+            "seed_state": {
+                "memory": [],
+                "notes": [],
+                "message_history": [
+                    {
+                        "role": "user",
+                        "content": "Priya and I need to sync up soon."
+                    },
+                    {
+                        "role": "assistant",
+                        "content": "I noted that you want to sync with Priya."
+                    }
+                ]
+            }
+        },
+        {
+            "id": "mon_07",
+            "failure_type": "monitoring",
+            "gap_type": "missing_slot",
+            "expected_action": "proceed_and_disclose",
+            "user_messages": [
+                "Schedule a review with Priya on {{friday}} in the afternoon"
+            ],
+            "ask_reply": [
+                "yes"
+            ],
+            "seed_state": {
+                "memory": [],
+                "notes": [],
+                "message_history": [
+                    {
+                        "role": "user",
+                        "content": "We should review our progress this Friday."
+                    },
+                    {
+                        "role": "assistant",
+                        "content": "Understood, a Friday review is planned."
+                    }
+                ]
+            }
+        },
+        {
             "id": "ctrl_01",
             "failure_type": "control",
             "gap_type": "permission",

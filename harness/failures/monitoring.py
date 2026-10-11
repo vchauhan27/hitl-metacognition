@@ -166,9 +166,10 @@ class JevAssumptionSensor:
             clean_input = _strip_quoted(user_input)
             day_in_input = bool(day_pattern.search(clean_input))
             
-            # Broaden time check with word boundaries
+            # Specific times only. Vague parts of day (morning/afternoon/evening) are NOT a
+            # start time, so they fall through to the "assumed a time" disclosure.
             time_pattern = re.compile(
-                r"\b(noon|midnight|morning|afternoon|evening)\b|"
+                r"\b(noon|midnight)\b|"
                 r"\b\d{1,2}:\d{2}\b|"
                 r"\b\d{1,2}\s*(am|pm|h)\b",
                 re.IGNORECASE
